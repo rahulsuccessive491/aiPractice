@@ -1,0 +1,462 @@
+import { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { api } from '../lib/api';
+import PageWrapper from '../components/PageWrapper';
+
+/* ── constants ───────────────────────────────────────────────── */
+const TYPES = [
+  { value: 'learning',         label: 'Learning',         icon: '📚', color: 'bg-blue-100   dark:bg-blue-900/40   text-blue-700   dark:text-blue-300' },
+  { value: 'practice_project', label: 'Practice Project', icon: '🛠️', color: 'bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300' },
+  { value: 'agent_built',      label: 'Agent Built',      icon: '🤖', color: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' },
+  { value: 'code_review',      label: 'Code Review',      icon: '🔍', color: 'bg-amber-100  dark:bg-amber-900/40  text-amber-700  dark:text-amber-300' },
+  { value: 'certification',    label: 'Certification',    icon: '🏆', color: 'bg-rose-100   dark:bg-rose-900/40   text-rose-700   dark:text-rose-300' },
+];
+
+const STATUSES = [
+  { value: 'completed',   label: 'Completed' },
+  { value: 'in_progress', label: 'In Progress' },
+];
+
+const TYPE_MAP    = Object.fromEntries(TYPES.map(t => [t.value, t]));
+const EMPTY_FORM  = {
+  activity_type: 'learning',
+  title: '',
+  tool_used: '',
+  domain: '',
+  status: 'completed',
+  notes: '',
+  activity_date: new Date().toISOString().split('T')[0],
+};
+
+/* ── small helpers ───────────────────────────────────────────── */
+const fieldCls = `w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white
+  dark:bg-slate-900 px-3.5 py-2.5 text-sm text-slate-900 dark:text-slate-100
+  shadow-sm transition placeholder:text-slate-400
+  focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30
+  dark:focus:border-brand-400`;
+
+const labelCls = 'mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400';
+
+/* ── tab underline animation ─────────────────────────────────── */
+const TAB_ITEMS = [
+  { id: 'form',    label: 'Log Activity' },
+  { id: 'history', label: 'My Activities' },
+];
+
+const listVariants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.06 } },
+};
+const itemVariants = {
+  hidden:   { opacity: 0, y: 14 },
+  visible:  { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.4, 0, 0.2, 1] } },
+  exit:     { opacity: 0, x: -20, transition: { duration: 0.2 } },
+};
+
+/* ── component ───────────────────────────────────────────────── */
+export default function ActivityLog() {
+  const [tab, setTab]             = useState('form');
+  const [form, setForm]           = useState(EMPTY_FORM);
+  const [tags, setTags]           = useState([]);
+  const [activities, setActivities] = useState([]);
+  const [loading, setLoading]     = useState(false);
+  const [histLoading, setHistLoading] = useState(false);
+  const [success, setSuccess]     = useState(false);
+  const [error, setError]         = useState(null);
+  const [filterType, setFilterType]     = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [deletingId, setDeletingId]     = useState(null);
+
+  /* fetch tags once */
+  useEffect(() => {
+    api.get('/users/tags').then(r => setTags(r.tags || [])).catch(() => {});
+  }, []);
+
+  /* fetch history when switching to history tab */
+  const loadActivities = () => {
+    setHistLoading(true);
+    api.get('/activities')
+      .then(r => setActivities(r.activities || []))
+      .catch(() => {})
+      .finally(() => setHistLoading(false));
+  };
+
+  useEffect(() => {
+    if (tab === 'history') loadActivities();
+  }, [tab]);
+
+  const toolTags   = useMemo(() => tags.filter(t => t.kind === 'tool'),   [tags]);
+  const domainTags = useMemo(() => tags.filter(t => t.kind === 'domain'), [tags]);
+
+  /* filtered list */
+  const filtered = useMemo(() => activities.filter(a => {
+    if (filterType   !== 'all' && a.activity_type !== filterType)   return false;
+    if (filterStatus !== 'all' && a.status        !== filterStatus) return false;
+    return true;
+  }), [activities, filterType, filterStatus]);
+
+  /* form handlers */
+  const onChange = e => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+
+  const onSubmit = async e => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(false);
+    setLoading(true);
+    try {
+      await api.post('/activities', form);
+      setSuccess(true);
+      setForm(EMPTY_FORM);
+      /* silently refresh history list in bg */
+      api.get('/activities').then(r => setActivities(r.activities || [])).catch(() => {});
+      setTimeout(() => setSuccess(false), 4000);
+    } catch (err) {
+      setError(err.message || 'Failed to log activity');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onDelete = async id => {
+    setDeletingId(id);
+    try {
+      await api.del(`/activities/${id}`);
+      setActivities(prev => prev.filter(a => a.id !== id));
+    } catch {
+      /* silently ignore */
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  return (
+    <PageWrapper>
+      <div className="max-w-2xl mx-auto space-y-6">
+
+        {/* Header */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28 }}>
+          <h1 className="text-2xl font-bold tracking-tight">Activity Logger</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Track your AI learning and projects
+          </p>
+        </motion.div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
+          {TAB_ITEMS.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${
+                tab === t.id
+                  ? 'text-brand-600 dark:text-brand-400'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              {t.label}
+              {tab === t.id && (
+                <motion.span
+                  layoutId="tab-line"
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 dark:bg-brand-400 rounded-t"
+                />
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab content */}
+        <AnimatePresence mode="wait">
+
+          {/* ── LOG FORM ── */}
+          {tab === 'form' && (
+            <motion.div
+              key="form"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.22 }}
+              className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 shadow-soft"
+            >
+              {/* Success banner */}
+              <AnimatePresence>
+                {success && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.96, y: -8 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96 }}
+                    transition={{ duration: 0.22 }}
+                    className="mb-6 flex items-center gap-3 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/30 px-4 py-3"
+                  >
+                    <span className="text-lg">✅</span>
+                    <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
+                      Activity logged successfully!
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Error banner */}
+              <AnimatePresence>
+                {error && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.96, y: -8 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96 }}
+                    transition={{ duration: 0.22 }}
+                    className="mb-6 flex items-center gap-3 rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-900/30 px-4 py-3"
+                  >
+                    <span className="text-lg">⚠️</span>
+                    <p className="text-sm font-medium text-rose-800 dark:text-rose-200">{error}</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <form onSubmit={onSubmit} className="space-y-5">
+
+                {/* Activity type — pill selector */}
+                <div>
+                  <label className={labelCls}>Activity Type *</label>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {TYPES.map(t => (
+                      <motion.button
+                        key={t.value}
+                        type="button"
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setForm(f => ({ ...f, activity_type: t.value }))}
+                        className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                          form.activity_type === t.value
+                            ? `${t.color} border-transparent`
+                            : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+                        }`}
+                      >
+                        {t.icon} {t.label}
+                      </motion.button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Title */}
+                <div>
+                  <label className={labelCls} htmlFor="title">Title / Description *</label>
+                  <input
+                    id="title" name="title" type="text" required
+                    value={form.title} onChange={onChange}
+                    placeholder="e.g. Built a RAG chatbot, Completed AWS AI Practitioner"
+                    className={fieldCls}
+                  />
+                </div>
+
+                {/* Date + Status */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelCls} htmlFor="activity_date">Date *</label>
+                    <input
+                      id="activity_date" name="activity_date" type="date" required
+                      value={form.activity_date} onChange={onChange}
+                      className={fieldCls}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls} htmlFor="status">Status</label>
+                    <select id="status" name="status" value={form.status} onChange={onChange} className={fieldCls}>
+                      {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Tool + Domain */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelCls} htmlFor="tool_used">Tool Used</label>
+                    <select id="tool_used" name="tool_used" value={form.tool_used} onChange={onChange} className={fieldCls}>
+                      <option value="">— Select tool —</option>
+                      {toolTags.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls} htmlFor="domain">Domain</label>
+                    <select id="domain" name="domain" value={form.domain} onChange={onChange} className={fieldCls}>
+                      <option value="">— Select domain —</option>
+                      {domainTags.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className={labelCls} htmlFor="notes">Notes</label>
+                  <textarea
+                    id="notes" name="notes" rows={3}
+                    value={form.notes} onChange={onChange}
+                    placeholder="Any additional details…"
+                    className={`${fieldCls} resize-none`}
+                  />
+                </div>
+
+                <motion.button
+                  type="submit"
+                  disabled={loading}
+                  whileTap={{ scale: 0.97 }}
+                  className="w-full rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed
+                             text-white font-semibold py-3 text-sm transition-colors shadow-sm"
+                >
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                      </svg>
+                      Logging…
+                    </span>
+                  ) : 'Log Activity'}
+                </motion.button>
+              </form>
+            </motion.div>
+          )}
+
+          {/* ── HISTORY ── */}
+          {tab === 'history' && (
+            <motion.div
+              key="history"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.22 }}
+              className="space-y-4"
+            >
+              {/* Filter bar */}
+              <div className="flex flex-wrap gap-2">
+                <select
+                  value={filterType}
+                  onChange={e => setFilterType(e.target.value)}
+                  className={`${fieldCls} w-auto`}
+                >
+                  <option value="all">All types</option>
+                  {TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+                <select
+                  value={filterStatus}
+                  onChange={e => setFilterStatus(e.target.value)}
+                  className={`${fieldCls} w-auto`}
+                >
+                  <option value="all">All statuses</option>
+                  {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+                <span className="flex items-center text-xs text-slate-400 dark:text-slate-500 ml-1">
+                  {filtered.length} result{filtered.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+
+              {/* List */}
+              {histLoading ? (
+                <div className="space-y-3">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="h-24 rounded-2xl bg-slate-100 dark:bg-slate-800 animate-pulse" />
+                  ))}
+                </div>
+              ) : filtered.length === 0 ? (
+                <motion.div
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                  className="py-16 flex flex-col items-center gap-2 text-slate-400 dark:text-slate-500"
+                >
+                  <span className="text-5xl">📭</span>
+                  <p className="text-sm mt-1">No activities match your filters.</p>
+                </motion.div>
+              ) : (
+                <motion.ul
+                  variants={listVariants}
+                  initial="hidden"
+                  animate="visible"
+                  className="space-y-3"
+                >
+                  <AnimatePresence>
+                    {filtered.map(activity => {
+                      const meta = TYPE_MAP[activity.activity_type];
+                      return (
+                        <motion.li
+                          key={activity.id}
+                          variants={itemVariants}
+                          exit={itemVariants.exit}
+                          layout
+                          className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-soft"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-3 min-w-0">
+                              <span className="text-2xl mt-0.5 shrink-0">{meta?.icon ?? '📌'}</span>
+                              <div className="min-w-0">
+                                <p className="font-semibold text-slate-900 dark:text-white truncate">
+                                  {activity.title}
+                                </p>
+                                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                                  {new Date(activity.activity_date).toLocaleDateString('en', {
+                                    year: 'numeric', month: 'short', day: 'numeric',
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Badges + delete */}
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className={`hidden sm:inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${meta?.color ?? ''}`}>
+                                {meta?.label}
+                              </span>
+                              <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                activity.status === 'completed'
+                                  ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                                  : 'bg-amber-100  dark:bg-amber-900/40  text-amber-700  dark:text-amber-300'
+                              }`}>
+                                {activity.status === 'completed' ? 'Done' : 'In Progress'}
+                              </span>
+                              <motion.button
+                                whileTap={{ scale: 0.9 }}
+                                onClick={() => onDelete(activity.id)}
+                                disabled={deletingId === activity.id}
+                                className="p-1.5 rounded-lg text-slate-300 dark:text-slate-600 hover:text-rose-500 dark:hover:text-rose-400
+                                           hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors disabled:opacity-40"
+                                title="Delete"
+                              >
+                                {deletingId === activity.id ? (
+                                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                                  </svg>
+                                ) : (
+                                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round"
+                                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                )}
+                              </motion.button>
+                            </div>
+                          </div>
+
+                          {/* Tool / domain / notes */}
+                          {(activity.tool_used || activity.domain || activity.notes) && (
+                            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
+                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                                {activity.tool_used && (
+                                  <span>🔧 <span className="font-medium text-slate-700 dark:text-slate-300">{activity.tool_used}</span></span>
+                                )}
+                                {activity.domain && (
+                                  <span>🏷️ <span className="font-medium text-slate-700 dark:text-slate-300">{activity.domain}</span></span>
+                                )}
+                              </div>
+                              {activity.notes && (
+                                <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">{activity.notes}</p>
+                              )}
+                            </div>
+                          )}
+                        </motion.li>
+                      );
+                    })}
+                  </AnimatePresence>
+                </motion.ul>
+              )}
+            </motion.div>
+          )}
+
+        </AnimatePresence>
+      </div>
+    </PageWrapper>
+  );
+}
