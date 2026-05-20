@@ -9,13 +9,15 @@ const authRouter = require('./routes/auth');
 const usersRouter = require('./routes/users');
 const activitiesRouter = require('./routes/activities');
 const adminRouter = require('./routes/admin');
+const skillsRouter         = require('./routes/skills');
+const notificationsRouter  = require('./routes/notifications');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
 // ---- middleware ----
 app.use(helmet());
-app.use(express.json({ limit: '256kb' }));
+app.use(express.json({ limit: '4mb' })); // raised to support base64 avatar uploads (~2 MB image → ~2.7 MB base64)
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
@@ -36,6 +38,8 @@ app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/activities', activitiesRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/skills',        skillsRouter);
+app.use('/api/notifications', notificationsRouter);
 
 // 404
 app.use((req, res) => res.status(404).json({ error: `Not found: ${req.method} ${req.path}` }));

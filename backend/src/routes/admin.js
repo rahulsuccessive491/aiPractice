@@ -230,4 +230,221 @@ router.get('/dashboard/users', (req, res) => {
   res.json({ users });
 });
 
+// ---------- GET /api/admin/reviews ----------
+// Pending certifications with user + reviewer info for approval table
+// ?dept=&status=Pending|Approved|Rejected&from=YYYY-MM-DD&to=YYYY-MM-DD
+router.get('/reviews', (req, res) => {
+  const { dept, status, from, to } = req.query;
+  const params = [];
+  const clauses = [];
+
+  if (status) {
+    clauses.push('uc.status = ?');
+    params.push(status);
+  } else {
+    clauses.push("uc.status = 'Pending'");
+  }
+  if (dept) {
+    clauses.push('u.department = ?');
+    params.push(dept);
+  }
+  if (from) {
+    clauses.push("uc.created_at >= ?");
+    params.push(from);
+  }
+  if (to) {
+    clauses.push("uc.created_at <= ?");
+    params.push(to + ' 23:59:59');
+  }
+
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+
+  const certs = db.all(`
+    SELECT uc.id, uc.cert_name, uc.issuing_org, uc.issue_date, uc.expiry_date, uc.no_expiry,
+           uc.credential_id, uc.credential_url, uc.file_name, uc.file_type,
+           uc.status, uc.reviewer_comment, uc.reviewed_at, uc.created_at,
+           u.id AS user_id, u.first_name, u.last_name, u.email, u.department, u.designation,
+           u.avatar_url,
+           rv.first_name AS reviewer_first, rv.last_name AS reviewer_last
+    FROM user_certifications uc
+    JOIN users u ON u.id = uc.user_id
+    LEFT JOIN users rv ON rv.id = uc.reviewer_id
+    ${where}
+    ORDER BY uc.created_at DESC
+  `, params);
+
+  const pending_count = db.get(
+    "SELECT COUNT(*) AS c FROM user_certifications WHERE status = 'Pending'"
+  ).c;
+
+  res.json({
+    certifications: certs.map(c => ({ ...c, no_expiry: c.no_expiry === 1 })),
+    pending_count,
+  });
+});
+
+// ---------- GET /api/admin/profiles ----------
+// All users with profile completion stats
+// ?dept=&completed=0|1&search=
+router.get('/profiles', (req, res) => {
+  const { dept, completed, search } = req.query;
+  const params = [];
+  const clauses = [];
+
+  if (dept) {
+    clauses.push('u.department = ?');
+    params.push(dept);
+  }
+  if (completed !== undefined && completed !== '') {
+    clauses.push('u.profile_completed = ?');
+    params.push(Number(completed));
+  }
+  if (search) {
+    const q = `%${search.trim()}%`;
+    clauses.push('(u.first_name || \' \' || u.last_name LIKE ? OR u.email LIKE ?)');
+    params.push(q, q);
+  }
+
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+
+  const users = db.all(`
+    SELECT u.id, u.first_name, u.last_name, u.email, u.role, u.department, u.designation,
+           u.profile_completed, u.avatar_url, u.location, u.date_of_joining,
+           t.name AS team,
+           (SELECT COUNT(*) FROM user_skills   WHERE user_id = u.id) AS skills_count,
+           (SELECT COUNT(*) FROM user_pocs     WHERE user_id = u.id) AS pocs_count,
+           (SELECT COUNT(*) FROM user_certifications WHERE user_id = u.id) AS certs_count,
+           (SELECT COUNT(*) FROM user_certifications WHERE user_id = u.id AND status = 'Approved') AS approved_certs
+    FROM users u
+    LEFT JOIN teams t ON t.id = u.team_id
+    ${where}
+    ORDER BY u.profile_completed ASC, u.first_name, u.last_name
+  `, params);
+
+  const departments = db.all(
+    `SELECT DISTINCT department FROM users WHERE department IS NOT NULL AND department != '' ORDER BY department`
+  );
+
+  res.json({
+    users: users.map(u => ({ ...u, profile_completed: u.profile_completed === 1 })),
+    departments: departments.map(d => d.department),
+  });
+});
+
+// ---------- GET /api/admin/activities ----------
+// All activities across all users with filters
+// ?dept=&team=&type=&domain=&status=&user=&from=&to=&page=&limit=
+router.get('/activities', (req, res) => {
+  const { dept, team, type, domain, status, user: userSearch, from, to } = req.query;
+  const page  = Math.max(1, Number(req.query.page  || 1));
+  const limit = Math.min(100, Math.max(10, Number(req.query.limit || 50)));
+
+  const params = [];
+  const clauses = [];
+
+  if (dept)       { clauses.push('u.department = ?');         params.push(dept); }
+  if (team)       { clauses.push('t.name = ?');               params.push(team); }
+  if (type)       { clauses.push('a.activity_type = ?');      params.push(type); }
+  if (domain)     { clauses.push('a.domain = ?');             params.push(domain); }
+  if (status)     { clauses.push('a.status = ?');             params.push(status); }
+  if (from)       { clauses.push('a.activity_date >= ?');     params.push(from); }
+  if (to)         { clauses.push('a.activity_date <= ?');     params.push(to); }
+  if (userSearch) {
+    const q = `%${userSearch.trim()}%`;
+    clauses.push("(u.first_name || ' ' || u.last_name LIKE ? OR u.email LIKE ?)");
+    params.push(q, q);
+  }
+
+  const where  = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  const offset = (page - 1) * limit;
+
+  const { count: total } = db.get(`
+    SELECT COUNT(*) as count
+    FROM activities a
+    JOIN users u ON a.user_id = u.id
+    LEFT JOIN teams t ON u.team_id = t.id
+    ${where}
+  `, params);
+
+  const activities = db.all(`
+    SELECT a.id, a.activity_type, a.title, a.tool_used, a.domain, a.status,
+           a.notes, a.activity_date, a.created_at,
+           u.id as user_id, u.first_name, u.last_name, u.email,
+           u.department, u.avatar_url,
+           t.name as team
+    FROM activities a
+    JOIN users u ON a.user_id = u.id
+    LEFT JOIN teams t ON u.team_id = t.id
+    ${where}
+    ORDER BY a.activity_date DESC, a.created_at DESC
+    LIMIT ? OFFSET ?
+  `, [...params, limit, offset]);
+
+  const departments = db.all(
+    `SELECT DISTINCT department FROM users WHERE department IS NOT NULL AND department != '' ORDER BY department`
+  ).map(d => d.department);
+
+  const teams = db.all(`SELECT DISTINCT name FROM teams ORDER BY name`).map(t => t.name);
+
+  const domains = db.all(
+    `SELECT DISTINCT domain FROM activities WHERE domain IS NOT NULL AND domain != '' ORDER BY domain`
+  ).map(d => d.domain);
+
+  res.json({ activities, total, page, limit, departments, teams, domains });
+});
+
+// ---------- GET /api/admin/users/:userId/profile ----------
+// Full profile view for a single user (admin/manager access)
+router.get('/users/:userId/profile', (req, res) => {
+  const user = db.get(`
+    SELECT u.*,
+           t.name  AS team_name,
+           rm.first_name AS manager_first,
+           rm.last_name  AS manager_last
+    FROM users u
+    LEFT JOIN teams t  ON t.id  = u.team_id
+    LEFT JOIN users rm ON rm.id = u.reporting_manager_id
+    WHERE u.id = ?
+  `, [req.params.userId]);
+
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  if (user.tech_stack) user.tech_stack = db.parseJson(user.tech_stack, []);
+  if (user.ai_tools)   user.ai_tools   = db.parseJson(user.ai_tools,   []);
+
+  const skills = db.all(
+    `SELECT * FROM user_skills WHERE user_id = ? ORDER BY category, name`,
+    [req.params.userId]
+  );
+
+  const pocs = db.all(
+    `SELECT * FROM user_pocs WHERE user_id = ? ORDER BY created_at DESC`,
+    [req.params.userId]
+  ).map(p => ({
+    ...p,
+    tools_stack:  db.parseJson(p.tools_stack,  []),
+    team_members: db.parseJson(p.team_members, []),
+  }));
+
+  const certifications = db.all(
+    `SELECT * FROM user_certifications WHERE user_id = ? ORDER BY created_at DESC`,
+    [req.params.userId]
+  ).map(c => ({ ...c, no_expiry: c.no_expiry === 1 }));
+
+  const activities = db.all(
+    `SELECT * FROM activities WHERE user_id = ? ORDER BY activity_date DESC LIMIT 20`,
+    [req.params.userId]
+  );
+
+  const activityStats = db.get(`
+    SELECT COUNT(*) as total,
+           COUNT(CASE WHEN status = 'completed' THEN 1 END)                           as completed,
+           COUNT(CASE WHEN activity_date >= date('now', '-30 days') THEN 1 END)       as this_month
+    FROM activities WHERE user_id = ?
+  `, [req.params.userId]);
+
+  const { password_hash, ...safeUser } = user;
+  res.json({ user: { ...safeUser, profile_completed: safeUser.profile_completed === 1 }, skills, pocs, certifications, activities, activityStats });
+});
+
 module.exports = router;

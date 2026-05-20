@@ -7,7 +7,7 @@ export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const next = location.state?.from?.pathname || '/profile';
+  const next = location.state?.from?.pathname || '/dashboard';
 
   const [values, setValues] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState({});
@@ -34,7 +34,9 @@ export default function Login() {
       else setServerError(result.error || 'Sign-in failed');
       return;
     }
-    navigate(next, { replace: true });
+    // Send users with incomplete profiles straight to setup
+    const destination = result.user?.profile_completed ? next : '/profile-setup';
+    navigate(destination, { replace: true });
   }
 
   return (
