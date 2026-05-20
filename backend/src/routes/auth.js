@@ -28,6 +28,14 @@ function publicUser(row) {
     tech_stack: db.parseJson(row.tech_stack, []),
     ai_tools:   db.parseJson(row.ai_tools, []),
     bio: row.bio || '',
+    profile_completed: row.profile_completed === 1,
+    work_email:           row.work_email          || '',
+    designation:          row.designation         || '',
+    reporting_manager_id: row.reporting_manager_id || null,
+    location:             row.location            || '',
+    date_of_joining:      row.date_of_joining     || '',
+    linkedin_url:         row.linkedin_url        || '',
+    avatar_url:           row.avatar_url          || '',
     created_at: row.created_at,
   };
 }

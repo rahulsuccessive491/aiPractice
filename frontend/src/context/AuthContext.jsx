@@ -56,7 +56,7 @@ export function AuthProvider({ children }) {
       localStorage.setItem(TOKEN_KEY, data.token);
       setToken(data.token);
       setUser(data.user);
-      return { ok: true };
+      return { ok: true, user: data.user };
     } catch (err) {
       setError(err.message);
       return { ok: false, error: err.message, fields: err.fields };
@@ -65,12 +65,19 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem('profile_gate_dismissed');
     setToken(null);
     setUser(null);
   }, []);
 
   const updateProfile = useCallback(async (patch) => {
-    const data = await api.patch('/users/me', patch);
+    if (patch && Object.keys(patch).length > 0) {
+      const data = await api.patch('/users/me', patch);
+      setUser(data.user);
+      return data.user;
+    }
+    // Re-fetch without patching (used after actions like complete-profile)
+    const data = await api.get('/users/me');
     setUser(data.user);
     return data.user;
   }, []);

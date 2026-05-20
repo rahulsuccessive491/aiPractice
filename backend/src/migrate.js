@@ -21,8 +21,13 @@ for (const file of files) {
     db.raw.exec(sql);
     console.log(`  ok  ${file}`);
   } catch (err) {
-    console.error(`  err ${file}:`, err.message);
-    process.exit(1);
+    // SQLite has no ADD COLUMN IF NOT EXISTS — treat "duplicate column" as a no-op.
+    if (err.message && err.message.includes('duplicate column name')) {
+      console.log(`  skip ${file} (already applied)`);
+    } else {
+      console.error(`  err ${file}:`, err.message);
+      process.exit(1);
+    }
   }
 }
 
