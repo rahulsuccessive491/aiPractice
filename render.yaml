@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: ai-skills-portal-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install && npm run migrate
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        sync: false          # set manually in Render dashboard to your Vercel URL
+      - key: DB_FILE
+        value: /opt/render/project/data/portal.db
+    disk:
+      name: sqlite-data
+      mountPath: /opt/render/project/data
+      sizeGB: 1
