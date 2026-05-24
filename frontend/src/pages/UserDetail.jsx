@@ -1,9 +1,189 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import PageWrapper from '../components/PageWrapper';
+
+const BACKEND_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:4000';
+const ALLOWED_EXT = '.jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.xls,.xlsx';
+
+function CommentThread({ activityId, currentUser }) {
+  const [comments, setComments]       = useState(null); // null = not loaded yet
+  const [open, setOpen]               = useState(false);
+  const [text, setText]               = useState('');
+  const [files, setFiles]             = useState([]);
+  const [posting, setPosting]         = useState(false);
+  const [deleting, setDeleting]       = useState(null);
+  const fileRef                       = useRef(null);
+
+  async function load() {
+    if (comments !== null) return;
+    const res = await api.get(`/activities/${activityId}/comments`);
+    setComments(res.comments || []);
+  }
+
+  function toggle() {
+    if (!open) load();
+    setOpen(o => !o);
+  }
+
+  async function postComment() {
+    if (!text.trim() && files.length === 0) return;
+    setPosting(true);
+    try {
+      const fd = new FormData();
+      fd.append('comment', text.trim());
+      for (const f of files) fd.append('attachments', f);
+      const res = await fetch(
+        `${BACKEND_URL}/api/activities/${activityId}/comments`,
+        { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, body: fd }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      setComments(prev => [...(prev || []), data.comment]);
+      setText('');
+      setFiles([]);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setPosting(false);
+    }
+  }
+
+  async function deleteComment(commentId) {
+    setDeleting(commentId);
+    try {
+      await api.del(`/activities/${activityId}/comments/${commentId}`);
+      setComments(prev => prev.filter(c => c.id !== commentId));
+    } catch {}
+    finally { setDeleting(null); }
+  }
+
+  const count = comments?.length ?? 0;
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={toggle}
+        className="flex items-center gap-1.5 text-xs font-medium text-brand-600 dark:text-brand-400 hover:underline"
+      >
+        💬 {comments === null ? 'Feedback' : `${count} comment${count !== 1 ? 's' : ''}`}
+        <span className="text-slate-400">{open ? '▲' : '▼'}</span>
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-3 space-y-3 border-l-2 border-brand-100 dark:border-brand-900/40 pl-3">
+
+              {/* Existing comments */}
+              {(comments || []).map(c => (
+                <div key={c.id} className="group relative">
+                  <div className="flex items-start gap-2">
+                    {c.commenter.avatar_url ? (
+                      <img src={c.commenter.avatar_url} className="h-6 w-6 rounded-full object-cover shrink-0 mt-0.5" alt="" />
+                    ) : (
+                      <span className="grid h-6 w-6 place-items-center rounded-full bg-brand-600 text-[9px] font-bold text-white shrink-0 mt-0.5">
+                        {c.commenter.first_name[0]}{c.commenter.last_name[0]}
+                      </span>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                          {c.commenter.first_name} {c.commenter.last_name}
+                        </span>
+                        <span className="text-[10px] text-slate-400 capitalize">{c.commenter.role}</span>
+                        <span className="text-[10px] text-slate-300 dark:text-slate-600">·</span>
+                        <span className="text-[10px] text-slate-400">
+                          {new Date(c.created_at).toLocaleDateString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-700 dark:text-slate-300 mt-0.5 whitespace-pre-wrap">{c.comment}</p>
+                      {c.attachments?.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                          {c.attachments.map(a => (
+                            <a key={a.id} href={`${BACKEND_URL}${a.url}`} target="_blank" rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700
+                                         bg-slate-50 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-medium
+                                         text-brand-600 dark:text-brand-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                              📎 {a.original_name}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {(c.commenter.id === currentUser.id || currentUser.role === 'admin') && (
+                      <button
+                        onClick={() => deleteComment(c.id)}
+                        disabled={deleting === c.id}
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded text-slate-300 hover:text-rose-500 transition"
+                        title="Delete comment"
+                      >
+                        🗑
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {/* New comment input */}
+              <div className="pt-1">
+                <textarea
+                  rows={2}
+                  value={text}
+                  onChange={e => setText(e.target.value)}
+                  placeholder="Leave feedback…"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900
+                             px-3 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400
+                             focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 resize-none"
+                />
+                {files.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {files.map((f, i) => (
+                      <span key={i} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700
+                                               bg-slate-50 dark:bg-slate-800 px-2 py-0.5 text-[10px] text-slate-600 dark:text-slate-400">
+                        📎 {f.name}
+                        <button onClick={() => setFiles(fs => fs.filter((_, j) => j !== i))} className="text-rose-400 hover:text-rose-600 ml-0.5">×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-center justify-between mt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    className="text-[10px] font-medium text-slate-500 hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
+                  >
+                    📎 Attach files
+                  </button>
+                  <button
+                    onClick={postComment}
+                    disabled={posting || (!text.trim() && files.length === 0)}
+                    className="rounded-lg bg-brand-600 hover:bg-brand-700 disabled:opacity-40 px-3 py-1
+                               text-xs font-semibold text-white transition-colors"
+                  >
+                    {posting ? 'Posting…' : 'Post →'}
+                  </button>
+                </div>
+                <input
+                  ref={fileRef} type="file" multiple accept={ALLOWED_EXT} className="hidden"
+                  onChange={e => setFiles(f => [...f, ...Array.from(e.target.files || [])])}
+                />
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 const PROF_COLORS = {
   Beginner:     'bg-slate-100  dark:bg-slate-800  text-slate-600  dark:text-slate-400',
@@ -407,27 +587,30 @@ export default function UserDetail() {
         {/* Recent Activities */}
         {activities.length > 0 && (
           <Section title={`Recent Activities (${activityStats.total} total)`} icon="📊" delay={0.24}>
-            <div className="space-y-3">
+            <div className="space-y-1">
               {activities.map((a, i) => (
                 <motion.div key={a.id}
                   initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.24 + i * 0.03 }}
-                  className="flex items-start justify-between gap-3 py-2 border-b border-slate-50 dark:border-slate-800 last:border-0"
+                  className="py-3 border-b border-slate-50 dark:border-slate-800 last:border-0"
                 >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{a.title}</p>
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs text-slate-400">
-                      {a.tool_used && <span>🔧 {a.tool_used}</span>}
-                      {a.domain    && <span>🏷️ {a.domain}</span>}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{a.title}</p>
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs text-slate-400">
+                        {a.tool_used && <span>🔧 {a.tool_used}</span>}
+                        {a.domain    && <span>🏷️ {a.domain}</span>}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${TYPE_COLORS[a.activity_type] ?? ''}`}>
+                        {a.activity_type.replace(/_/g, ' ')}
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        {new Date(a.activity_date).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </span>
                     </div>
                   </div>
-                  <div className="flex flex-col items-end gap-1 shrink-0">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${TYPE_COLORS[a.activity_type] ?? ''}`}>
-                      {a.activity_type.replace(/_/g, ' ')}
-                    </span>
-                    <span className="text-[11px] text-slate-400">
-                      {new Date(a.activity_date).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </span>
-                  </div>
+                  <CommentThread activityId={a.id} currentUser={currentUser} />
                 </motion.div>
               ))}
             </div>

@@ -143,7 +143,7 @@ export default function AdminDashboard() {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState(null);
   const [overview, setOverview] = useState(null);
-  const [chartData, setChartData] = useState({ byType: [], byDomain: [], byTeam: [], adoptionByTeam: [] });
+  const [chartData, setChartData] = useState({ byType: [], byDomain: [], byTeam: [], adoptionByTeam: [], byModel: [] });
   const [teamBreakdown, setTeamBreakdown] = useState([]);
   const [allUsers, setAllUsers]       = useState([]);
   const [search, setSearch]           = useState('');
@@ -190,12 +190,13 @@ export default function AdminDashboard() {
       setError(null);
       try {
         if (tab === 'overview') {
-          const [ovRes, typeRes, domainRes, teamRes, adoptionRes] = await Promise.all([
+          const [ovRes, typeRes, domainRes, teamRes, adoptionRes, modelRes] = await Promise.all([
             api.get('/admin/dashboard/overview'),
             api.get('/admin/dashboard/chart/activities-by-type'),
             api.get('/admin/dashboard/chart/activities-by-domain'),
             api.get('/admin/dashboard/chart/activities-by-team'),
             api.get('/admin/dashboard/chart/adoption-by-team'),
+            api.get('/admin/dashboard/chart/activities-by-model'),
           ]);
           setOverview(ovRes);
           setChartData({
@@ -203,6 +204,7 @@ export default function AdminDashboard() {
             byDomain:     domainRes.data     || [],
             byTeam:       teamRes.data       || [],
             adoptionByTeam: adoptionRes.data || [],
+            byModel:      modelRes.data      || [],
           });
         } else if (tab === 'teams') {
           const res = await api.get('/admin/dashboard/team-breakdown');
@@ -547,6 +549,28 @@ export default function AdminDashboard() {
                              fill="#10b981" radius={[0, 6, 6, 0]} maxBarSize={20}
                              animationDuration={900} />
                       </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </ChartCard>
+
+                {/* PieChart — AI Models Used */}
+                <ChartCard title="AI Models Used" delay={0.52}>
+                  {loading ? <Skeleton className="h-56" /> : chartData.byModel.length === 0 ? <EmptyChart /> : (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <PieChart>
+                        <Pie data={chartData.byModel} cx="50%" cy="50%"
+                             innerRadius={55} outerRadius={85}
+                             dataKey="count" nameKey="name"
+                             paddingAngle={3} strokeWidth={0}
+                             animationBegin={0} animationDuration={900}>
+                          {chartData.byModel.map((_, i) => (
+                            <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip content={<ChartTooltip />} />
+                        <Legend iconType="circle" iconSize={8}
+                                wrapperStyle={{ fontSize: 11, color: tickColor }} />
+                      </PieChart>
                     </ResponsiveContainer>
                   )}
                 </ChartCard>
