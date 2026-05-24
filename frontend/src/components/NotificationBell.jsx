@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../lib/api.js';
 
@@ -47,13 +48,20 @@ const TYPE_ICON = {
         d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0" />
     </svg>
   ),
+  activity_commented: (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
+    </svg>
+  ),
 };
 
 const TYPE_COLOR = {
-  cert_submitted: 'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-400',
-  cert_reviewed:  'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400',
-  poc_updated:    'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400',
-  profile_updated:'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+  cert_submitted:    'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-400',
+  cert_reviewed:     'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400',
+  poc_updated:       'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400',
+  profile_updated:   'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+  activity_commented:'bg-brand-100 text-brand-600 dark:bg-brand-900/40 dark:text-brand-400',
 };
 
 // ---------------------------------------------------------------------------
@@ -160,13 +168,21 @@ function ReviewAction({ notif, onDone }) {
 // Single notification row
 // ---------------------------------------------------------------------------
 
-function NotifItem({ notif, isReviewer, onRead, onReviewDone }) {
+function NotifItem({ notif, isReviewer, currentUser, onRead, onReviewDone, onNavigate }) {
+  function handleClick() {
+    if (!notif.read) onRead(notif.id);
+    if (notif.type === 'activity_commented') {
+      const isManager = ['lead', 'manager', 'admin'].includes(currentUser?.role);
+      onNavigate(isManager ? `/admin/users/${notif.actor_id}` : '/activities');
+    }
+  }
+
   return (
     <div
       className={`px-4 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60 ${
-        !notif.read ? 'bg-brand-50/60 dark:bg-brand-500/5' : ''
-      }`}
-      onClick={() => !notif.read && onRead(notif.id)}
+        notif.type === 'activity_commented' ? 'cursor-pointer' : ''
+      } ${!notif.read ? 'bg-brand-50/60 dark:bg-brand-500/5' : ''}`}
+      onClick={handleClick}
     >
       <div className="flex gap-3">
         {/* Type icon */}
@@ -215,6 +231,7 @@ const POLL_INTERVAL = 30_000; // 30 s
 
 export default function NotificationBell() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [notifs,  setNotifs]  = useState([]);
   const [unread,  setUnread]  = useState(0);
   const [open,    setOpen]    = useState(false);
@@ -337,8 +354,10 @@ export default function NotificationBell() {
                     key={n.id}
                     notif={n}
                     isReviewer={isReviewer}
+                    currentUser={user}
                     onRead={markRead}
                     onReviewDone={handleReviewDone}
+                    onNavigate={(path) => { setOpen(false); navigate(path); }}
                   />
                 ))
               )}
