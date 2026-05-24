@@ -27,7 +27,9 @@ app.use(cors({
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);          // allow curl / same-origin
     if (allowedOrigins.includes(origin)) return cb(null, true);
-    cb(new Error(`CORS: origin ${origin} not allowed`));
+    const err = new Error(`CORS: origin ${origin} not allowed`);
+    err.status = 403;
+    cb(err);
   },
   credentials: true,
 }));
