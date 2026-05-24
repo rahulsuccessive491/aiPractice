@@ -428,6 +428,18 @@ export default function UserDetail() {
       .finally(() => setLoading(false));
   }, [userId]);
 
+  // Must be before early returns — hooks cannot be called conditionally
+  const timeline = useMemo(() => {
+    const acts      = (data?.activities     || []).map(a => ({ ...a, _type: 'activity' }));
+    const pocItems  = (data?.pocs           || []).map(p => ({ ...p, _type: 'poc',  _sortDate: p.start_date  || p.created_at }));
+    const certItems = (data?.certifications || []).map(c => ({ ...c, _type: 'cert', _sortDate: c.issue_date || c.created_at }));
+    return [...acts, ...pocItems, ...certItems].sort((a, b) => {
+      const da = new Date(a._type === 'activity' ? a.activity_date : a._sortDate);
+      const db = new Date(b._type === 'activity' ? b.activity_date : b._sortDate);
+      return db - da;
+    });
+  }, [data?.activities, data?.pocs, data?.certifications]);
+
   if (loading) {
     return (
       <PageWrapper>
@@ -462,17 +474,6 @@ export default function UserDetail() {
   }, {});
 
   const initials = `${user.first_name?.[0] ?? ''}${user.last_name?.[0] ?? ''}`.toUpperCase();
-
-  const timeline = useMemo(() => {
-    const acts     = (activities     || []).map(a => ({ ...a, _type: 'activity' }));
-    const pocItems = (pocs           || []).map(p => ({ ...p, _type: 'poc',  _sortDate: p.start_date  || p.created_at }));
-    const certItems = (certifications || []).map(c => ({ ...c, _type: 'cert', _sortDate: c.issue_date || c.created_at }));
-    return [...acts, ...pocItems, ...certItems].sort((a, b) => {
-      const da = new Date(a._type === 'activity' ? a.activity_date : a._sortDate);
-      const db = new Date(b._type === 'activity' ? b.activity_date : b._sortDate);
-      return db - da;
-    });
-  }, [activities, pocs, certifications]);
 
   return (
     <PageWrapper>
