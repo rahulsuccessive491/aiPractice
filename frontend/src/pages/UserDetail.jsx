@@ -9,18 +9,25 @@ const BACKEND_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http:/
 const ALLOWED_EXT = '.jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.xls,.xlsx';
 
 function CommentThread({ activityId, currentUser }) {
-  const [comments, setComments]       = useState(null); // null = not loaded yet
+  const [comments, setComments]       = useState(null);
   const [open, setOpen]               = useState(false);
   const [text, setText]               = useState('');
   const [files, setFiles]             = useState([]);
   const [posting, setPosting]         = useState(false);
+  const [postSuccess, setPostSuccess] = useState(false);
+  const [postError, setPostError]     = useState(null);
   const [deleting, setDeleting]       = useState(null);
   const fileRef                       = useRef(null);
+  const successTimer                  = useRef(null);
 
   async function load() {
     if (comments !== null) return;
-    const res = await api.get(`/activities/${activityId}/comments`);
-    setComments(res.comments || []);
+    try {
+      const res = await api.get(`/activities/${activityId}/comments`);
+      setComments(res.comments || []);
+    } catch {
+      setComments([]);
+    }
   }
 
   function toggle() {
@@ -31,6 +38,7 @@ function CommentThread({ activityId, currentUser }) {
   async function postComment() {
     if (!text.trim() && files.length === 0) return;
     setPosting(true);
+    setPostError(null);
     try {
       const fd = new FormData();
       fd.append('comment', text.trim());
@@ -40,12 +48,15 @@ function CommentThread({ activityId, currentUser }) {
         { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('ai-skills-portal.token')}` }, body: fd }
       );
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed');
+      if (!res.ok) throw new Error(data.error || 'Failed to post comment');
       setComments(prev => [...(prev || []), data.comment]);
       setText('');
       setFiles([]);
+      setPostSuccess(true);
+      clearTimeout(successTimer.current);
+      successTimer.current = setTimeout(() => setPostSuccess(false), 3000);
     } catch (err) {
-      alert(err.message);
+      setPostError(err.message);
     } finally {
       setPosting(false);
     }
@@ -60,6 +71,7 @@ function CommentThread({ activityId, currentUser }) {
     finally { setDeleting(null); }
   }
 
+  const initials = (fn, ln) => `${(fn || '?')[0]}${(ln || '?')[0]}`.toUpperCase();
   const count = comments?.length ?? 0;
 
   return (
@@ -83,23 +95,58 @@ function CommentThread({ activityId, currentUser }) {
           >
             <div className="mt-3 space-y-3 border-l-2 border-brand-100 dark:border-brand-900/40 pl-3">
 
-              {/* Existing comments */}
+              {/* Success toast */}
+              <AnimatePresence>
+                {postSuccess && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex items-center gap-2 rounded-lg border border-emerald-200 dark:border-emerald-800
+                               bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1.5 text-xs font-medium
+                               text-emerald-700 dark:text-emerald-300"
+                  >
+                    ✅ Feedback posted successfully!
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Error banner */}
+              <AnimatePresence>
+                {postError && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-rose-200 dark:border-rose-800
+                               bg-rose-50 dark:bg-rose-900/30 px-3 py-1.5 text-xs font-medium
+                               text-rose-700 dark:text-rose-300"
+                  >
+                    <span>⚠️ {postError}</span>
+                    <button onClick={() => setPostError(null)} className="text-rose-400 hover:text-rose-600 font-bold">×</button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Comment list */}
               {(comments || []).map(c => (
                 <div key={c.id} className="group relative">
                   <div className="flex items-start gap-2">
-                    {c.commenter.avatar_url ? (
+                    {c.commenter?.avatar_url ? (
                       <img src={c.commenter.avatar_url} className="h-6 w-6 rounded-full object-cover shrink-0 mt-0.5" alt="" />
                     ) : (
                       <span className="grid h-6 w-6 place-items-center rounded-full bg-brand-600 text-[9px] font-bold text-white shrink-0 mt-0.5">
-                        {c.commenter.first_name[0]}{c.commenter.last_name[0]}
+                        {initials(c.commenter?.first_name, c.commenter?.last_name)}
                       </span>
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                          {c.commenter.first_name} {c.commenter.last_name}
+                          {c.commenter?.first_name} {c.commenter?.last_name}
                         </span>
-                        <span className="text-[10px] text-slate-400 capitalize">{c.commenter.role}</span>
+                        <span className="text-[10px] text-slate-400 capitalize">{c.commenter?.role}</span>
                         <span className="text-[10px] text-slate-300 dark:text-slate-600">·</span>
                         <span className="text-[10px] text-slate-400">
                           {new Date(c.created_at).toLocaleDateString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
@@ -119,7 +166,7 @@ function CommentThread({ activityId, currentUser }) {
                         </div>
                       )}
                     </div>
-                    {(c.commenter.id === currentUser.id || currentUser.role === 'admin') && (
+                    {(c.commenter?.id === currentUser.id || currentUser.role === 'admin') && (
                       <button
                         onClick={() => deleteComment(c.id)}
                         disabled={deleting === c.id}
