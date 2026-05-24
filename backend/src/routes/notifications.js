@@ -59,6 +59,7 @@ router.get('/', requireAuth, (req, res) => {
   const onlyUnread = req.query.unread === '1';
   const rows = db.all(
     `SELECT n.id, n.type, n.title, n.body, n.entity_type, n.entity_id,
+            n.actor_id,
             n.read, n.action_taken, n.created_at,
             u.first_name AS actor_first, u.last_name AS actor_last,
             u.avatar_url AS actor_avatar

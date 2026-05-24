@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../lib/api';
@@ -463,6 +463,17 @@ export default function UserDetail() {
 
   const initials = `${user.first_name?.[0] ?? ''}${user.last_name?.[0] ?? ''}`.toUpperCase();
 
+  const timeline = useMemo(() => {
+    const acts     = (activities     || []).map(a => ({ ...a, _type: 'activity' }));
+    const pocItems = (pocs           || []).map(p => ({ ...p, _type: 'poc',  _sortDate: p.start_date  || p.created_at }));
+    const certItems = (certifications || []).map(c => ({ ...c, _type: 'cert', _sortDate: c.issue_date || c.created_at }));
+    return [...acts, ...pocItems, ...certItems].sort((a, b) => {
+      const da = new Date(a._type === 'activity' ? a.activity_date : a._sortDate);
+      const db = new Date(b._type === 'activity' ? b.activity_date : b._sortDate);
+      return db - da;
+    });
+  }, [activities, pocs, certifications]);
+
   return (
     <PageWrapper>
       <div className="max-w-3xl mx-auto space-y-5">
@@ -647,137 +658,131 @@ export default function UserDetail() {
           </Section>
         )}
 
-        {/* POCs */}
-        {pocs.length > 0 && (
-          <Section title={`AI Projects & POCs (${pocs.length})`} icon="🚀" delay={0.16}>
-            <div className="space-y-4">
-              {pocs.map(poc => (
-                <div key={poc.id}
-                  className="rounded-xl border border-slate-100 dark:border-slate-800 p-4 space-y-2">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-slate-900 dark:text-white">{poc.poc_name}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">{poc.category}</p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                        poc.status === 'Completed' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' :
-                        poc.status === 'In Progress' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' :
-                        poc.status === 'On Hold' ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' :
-                        'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                      }`}>
-                        {poc.status}
-                      </span>
-                      <span className="text-xs text-slate-400">{poc.progress}%</span>
-                    </div>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }} animate={{ width: `${poc.progress}%` }}
-                      transition={{ duration: 0.7, ease: [0.4, 0, 0.2, 1] }}
-                      className={`h-full rounded-full ${
-                        poc.progress >= 80 ? 'bg-emerald-500' : poc.progress >= 40 ? 'bg-brand-500' : 'bg-amber-500'
-                      }`}
-                    />
-                  </div>
-
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-                    {poc.problem_statement && <p className="w-full text-slate-600 dark:text-slate-400">{poc.problem_statement}</p>}
-                    {poc.tools_stack?.length > 0 && (
-                      <p>🔧 {poc.tools_stack.join(', ')}</p>
-                    )}
-                    {poc.repo_link && (
-                      <a href={poc.repo_link} target="_blank" rel="noopener noreferrer"
-                        className="text-brand-600 dark:text-brand-400 hover:underline">🔗 Repo</a>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Section>
-        )}
-
-        {/* Certifications */}
-        {certifications.length > 0 && (
-          <Section title={`Certifications (${certifications.length})`} icon="🏆" delay={0.2}>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-800">
-                    <th className="pb-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">Certificate</th>
-                    <th className="pb-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400 hidden sm:table-cell">Issuer</th>
-                    <th className="pb-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400 hidden sm:table-cell">Issued</th>
-                    <th className="pb-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
-                  {certifications.map(c => (
-                    <tr key={c.id}>
-                      <td className="py-3 pr-4">
-                        <p className="font-medium text-slate-900 dark:text-white">{c.cert_name}</p>
-                        {c.credential_url && (
-                          <a href={c.credential_url} target="_blank" rel="noopener noreferrer"
-                            className="text-xs text-brand-600 dark:text-brand-400 hover:underline">🔗 Verify</a>
-                        )}
-                      </td>
-                      <td className="py-3 pr-4 text-xs text-slate-500 dark:text-slate-400 hidden sm:table-cell">{c.issuing_org}</td>
-                      <td className="py-3 pr-4 text-xs text-slate-500 dark:text-slate-400 hidden sm:table-cell">
-                        {c.issue_date ? new Date(c.issue_date).toLocaleDateString('en', { year: 'numeric', month: 'short' }) : '—'}
-                      </td>
-                      <td className="py-3">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          c.status === 'Approved'  ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' :
-                          c.status === 'Rejected'  ? 'bg-rose-100   dark:bg-rose-900/40   text-rose-700   dark:text-rose-300' :
-                          'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
-                        }`}>
-                          {c.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Section>
-        )}
-
-        {/* Recent Activities */}
-        {activities.length > 0 && (
-          <Section title={`Recent Activities (${activityStats.total} total)`} icon="📊" delay={0.24}>
+        {/* Unified Timeline */}
+        {timeline.length > 0 && (
+          <Section title={`Recent Timeline (${timeline.length} items)`} icon="📋" delay={0.16}>
             <div className="space-y-1">
-              {activities.map((a, i) => (
-                <motion.div key={a.id}
-                  initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.24 + i * 0.03 }}
-                  onClick={() => setSelectedActivity(a)}
-                  className="py-3 px-2 -mx-2 rounded-xl border-b border-slate-50 dark:border-slate-800 last:border-0
-                             cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{a.title}</p>
-                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs text-slate-400">
-                        {a.tool_used && <span>🔧 {a.tool_used}</span>}
-                        {a.domain    && <span>🏷️ {a.domain}</span>}
+              {timeline.slice(0, 20).map((item, i) => {
+                if (item._type === 'activity') {
+                  return (
+                    <motion.div key={`act-${item.id}`}
+                      initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.16 + i * 0.03 }}
+                      onClick={() => setSelectedActivity(item)}
+                      className="py-3 px-2 -mx-2 rounded-xl border-b border-slate-50 dark:border-slate-800 last:border-0
+                                 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{item.title}</p>
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs text-slate-400">
+                            {item.tool_used && <span>🔧 {item.tool_used}</span>}
+                            {item.domain    && <span>🏷️ {item.domain}</span>}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${TYPE_COLORS[item.activity_type] ?? ''}`}>
+                            {item.activity_type.replace(/_/g, ' ')}
+                          </span>
+                          <span className="text-[11px] text-slate-400">
+                            {new Date(item.activity_date).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </span>
+                          {item.comment_count > 0 && (
+                            <span className="text-[10px] font-semibold text-brand-600 dark:text-brand-400">
+                              💬 {item.comment_count}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${TYPE_COLORS[a.activity_type] ?? ''}`}>
-                        {a.activity_type.replace(/_/g, ' ')}
-                      </span>
-                      <span className="text-[11px] text-slate-400">
-                        {new Date(a.activity_date).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </span>
-                      {a.comment_count > 0 && (
-                        <span className="text-[10px] font-semibold text-brand-600 dark:text-brand-400">
-                          💬 {a.comment_count}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
+                    </motion.div>
+                  );
+                }
+
+                if (item._type === 'poc') {
+                  return (
+                    <motion.div key={`poc-${item.id}`}
+                      initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.16 + i * 0.03 }}
+                      className="py-3 px-3 rounded-xl border-b border-slate-50 dark:border-slate-800 last:border-0
+                                 border-l-4 border-l-purple-400"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{item.poc_name}</p>
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs text-slate-400">
+                            {item.category && <span>📂 {item.category}</span>}
+                            {item.tools_stack?.length > 0 && <span>🔧 {item.tools_stack.join(', ')}</span>}
+                          </div>
+                          <div className="mt-1.5 h-1 w-24 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${item.progress >= 80 ? 'bg-emerald-500' : item.progress >= 40 ? 'bg-brand-500' : 'bg-amber-500'}`}
+                              style={{ width: `${item.progress ?? 0}%` }}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
+                            POC
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                            item.status === 'Completed'   ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' :
+                            item.status === 'In Progress' ? 'bg-blue-100    dark:bg-blue-900/40    text-blue-700    dark:text-blue-300' :
+                            'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                          }`}>
+                            {item.status}
+                          </span>
+                          {item.start_date && (
+                            <span className="text-[11px] text-slate-400">
+                              {new Date(item.start_date).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                }
+
+                if (item._type === 'cert') {
+                  return (
+                    <motion.div key={`cert-${item.id}`}
+                      initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.16 + i * 0.03 }}
+                      className="py-3 px-3 rounded-xl border-b border-slate-50 dark:border-slate-800 last:border-0
+                                 border-l-4 border-l-emerald-400"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{item.cert_name}</p>
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs text-slate-400">
+                            {item.issuing_org && <span>🏢 {item.issuing_org}</span>}
+                            {item.credential_url && (
+                              <a href={item.credential_url} target="_blank" rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                className="text-brand-600 dark:text-brand-400 hover:underline">🔗 Verify</a>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
+                            Cert
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                            item.status === 'Approved' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' :
+                            item.status === 'Rejected' ? 'bg-rose-100    dark:bg-rose-900/40    text-rose-700    dark:text-rose-300' :
+                            'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                          }`}>
+                            {item.status}
+                          </span>
+                          {item.issue_date && (
+                            <span className="text-[11px] text-slate-400">
+                              {new Date(item.issue_date).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                }
+
+                return null;
+              })}
             </div>
           </Section>
         )}
