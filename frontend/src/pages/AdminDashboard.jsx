@@ -161,6 +161,14 @@ export default function AdminDashboard() {
   const [pendingRole, setPendingRole]   = useState({});   // { [userId]: newRole }
   const [roleStatus, setRoleStatus]     = useState({});   // { [userId]: 'saving'|'saved'|'error' }
 
+  // Create user modal
+  const EMPTY_CREATE = { email: '', first_name: '', last_name: '', role: 'developer', department: '' };
+  const [showCreateUser,  setShowCreateUser]  = useState(false);
+  const [createForm,      setCreateForm]      = useState(EMPTY_CREATE);
+  const [createLoading,   setCreateLoading]   = useState(false);
+  const [createError,     setCreateError]     = useState(null);
+  const [createSuccess,   setCreateSuccess]   = useState(null);
+
   /* access guard */
   if (!user || !['manager', 'admin'].includes(user.role)) {
     return (
@@ -375,6 +383,23 @@ export default function AdminDashboard() {
     developer: 'bg-blue-100   dark:bg-blue-900/40   text-blue-700   dark:text-blue-300',
     lead:      'bg-amber-100  dark:bg-amber-900/40  text-amber-700  dark:text-amber-300',
   };
+
+  async function createUser(e) {
+    e.preventDefault();
+    setCreateLoading(true);
+    setCreateError(null);
+    setCreateSuccess(null);
+    try {
+      const { user: newUser } = await api.post('/admin/users', createForm);
+      setAllUsers(prev => [{ ...newUser, team: null, activity_count: 0 }, ...prev]);
+      setCreateSuccess(newUser);
+      setCreateForm(EMPTY_CREATE);
+    } catch (err) {
+      setCreateError(err.message || 'Failed to create user');
+    } finally {
+      setCreateLoading(false);
+    }
+  }
 
   return (
     <PageWrapper>
@@ -666,16 +691,30 @@ export default function AdminDashboard() {
           {tab === 'users' && (
             <motion.div key="users" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
               className="space-y-4">
-              {/* Search */}
-              <input
-                type="search"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search by name or email…"
-                className="w-full max-w-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900
-                           px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100
-                           focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
-              />
+              {/* Search + Add User */}
+              <div className="flex items-center gap-3">
+                <input
+                  type="search"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search by name or email…"
+                  className="w-full max-w-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900
+                             px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100
+                             focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                />
+                {user?.role === 'admin' && (
+                  <button
+                    onClick={() => { setShowCreateUser(true); setCreateError(null); setCreateSuccess(null); }}
+                    className="flex items-center gap-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 px-4 py-2.5
+                               text-sm font-semibold text-white transition-colors shrink-0"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    Add User
+                  </button>
+                )}
+              </div>
               {loading ? (
                 <div className="space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-16" />)}</div>
               ) : (
@@ -1108,6 +1147,179 @@ export default function AdminDashboard() {
         </AnimatePresence>
 
       </div>
+
+      {/* ── Create User Modal ── */}
+      <AnimatePresence>
+        {showCreateUser && (
+          <>
+            <motion.div
+              key="cu-backdrop"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+              onClick={() => { setShowCreateUser(false); setCreateSuccess(null); }}
+            />
+            <motion.div
+              key="cu-modal"
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 12 }}
+              transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+              className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2
+                         bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl"
+            >
+              {/* Modal header */}
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4">
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Add New User</h2>
+                <button
+                  onClick={() => { setShowCreateUser(false); setCreateSuccess(null); }}
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="px-6 py-5">
+                {/* Success state */}
+                {createSuccess ? (
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-4">
+                      <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300 mb-2">✅ User created successfully!</p>
+                      <div className="text-xs text-emerald-700 dark:text-emerald-400 space-y-1">
+                        <p><span className="font-semibold">Name:</span> {createSuccess.first_name} {createSuccess.last_name}</p>
+                        <p><span className="font-semibold">Email:</span> {createSuccess.email}</p>
+                        <p><span className="font-semibold">Role:</span> {createSuccess.role}</p>
+                        <p><span className="font-semibold">Password:</span> Profile@123</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Share the email and default password with the user. They can change it after login.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setCreateSuccess(null)}
+                        className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-2 text-sm font-semibold
+                                   text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                      >
+                        Add Another
+                      </button>
+                      <button
+                        onClick={() => { setShowCreateUser(false); setCreateSuccess(null); }}
+                        className="flex-1 rounded-xl bg-brand-600 hover:bg-brand-700 px-4 py-2 text-sm font-semibold text-white transition-colors"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Create form */
+                  <form onSubmit={createUser} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">First Name *</label>
+                        <input
+                          required
+                          value={createForm.first_name}
+                          onChange={e => setCreateForm(f => ({ ...f, first_name: e.target.value }))}
+                          placeholder="Rahul"
+                          className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800
+                                     px-3 py-2 text-sm text-slate-900 dark:text-slate-100
+                                     focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Last Name *</label>
+                        <input
+                          required
+                          value={createForm.last_name}
+                          onChange={e => setCreateForm(f => ({ ...f, last_name: e.target.value }))}
+                          placeholder="Chauhan"
+                          className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800
+                                     px-3 py-2 text-sm text-slate-900 dark:text-slate-100
+                                     focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Email *</label>
+                      <input
+                        required
+                        type="email"
+                        value={createForm.email}
+                        onChange={e => setCreateForm(f => ({ ...f, email: e.target.value }))}
+                        placeholder="rahul.chauhan@successive.tech"
+                        className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800
+                                   px-3 py-2 text-sm text-slate-900 dark:text-slate-100
+                                   focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Role</label>
+                        <select
+                          value={createForm.role}
+                          onChange={e => setCreateForm(f => ({ ...f, role: e.target.value }))}
+                          className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800
+                                     px-3 py-2 text-sm text-slate-900 dark:text-slate-100
+                                     focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                        >
+                          <option value="developer">Developer</option>
+                          <option value="lead">Lead</option>
+                          <option value="manager">Manager</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Department</label>
+                        <input
+                          value={createForm.department}
+                          onChange={e => setCreateForm(f => ({ ...f, department: e.target.value }))}
+                          placeholder="Engineering"
+                          className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800
+                                     px-3 py-2 text-sm text-slate-900 dark:text-slate-100
+                                     focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 px-3 py-2.5">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        🔐 Default password: <span className="font-semibold text-slate-700 dark:text-slate-300">Profile@123</span>
+                        &nbsp;— share with the user after creation.
+                      </p>
+                    </div>
+
+                    {createError && (
+                      <p className="text-xs font-medium text-rose-600 dark:text-rose-400">⚠️ {createError}</p>
+                    )}
+
+                    <div className="flex gap-2 pt-1">
+                      <button type="button"
+                        onClick={() => setShowCreateUser(false)}
+                        className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-2.5 text-sm font-semibold
+                                   text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button type="submit" disabled={createLoading}
+                        className="flex-1 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 px-4 py-2.5
+                                   text-sm font-semibold text-white transition-colors"
+                      >
+                        {createLoading ? 'Creating…' : 'Create User'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
     </PageWrapper>
   );
 }
