@@ -37,7 +37,7 @@ function ActivityCommentThread({ activityId, initialCount, currentUserId }) {
       for (const f of files) fd.append('attachments', f);
       const res = await fetch(
         `${BACKEND_URL}/api/activities/${activityId}/comments`,
-        { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, body: fd }
+        { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('ai-skills-portal.token')}` }, body: fd }
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed');
