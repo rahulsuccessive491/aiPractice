@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: ai-skills-portal-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm run migrate && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        sync: false          # set manually in Render dashboard: https://ai-skills-portal.vercel.app
