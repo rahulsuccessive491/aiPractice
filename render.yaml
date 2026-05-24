@@ -12,3 +12,5 @@ services:
         generateValue: true
       - key: CORS_ORIGIN
         sync: false          # set manually in Render dashboard: https://ai-skills-portal.vercel.app
+      - key: NODE_VERSION
+        value: 20.18.0
