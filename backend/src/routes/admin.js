@@ -1,6 +1,9 @@
 const express = require('express');
+const bcrypt  = require('bcryptjs');
 const db = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
+
+const DEFAULT_PASSWORD = 'Profile@123';
 
 const router = express.Router();
 
@@ -463,6 +466,41 @@ router.get('/users/:userId/profile', (req, res) => {
 
   const { password_hash, ...safeUser } = user;
   res.json({ user: { ...safeUser, profile_completed: safeUser.profile_completed === 1 }, skills, pocs, certifications, activities, activityStats });
+});
+
+// ---------- POST /api/admin/users ----------
+// Admin creates a new user account with default password Profile@123
+router.post('/users', requireRole('admin'), async (req, res) => {
+  const { email, first_name, last_name, role = 'developer', department = '' } = req.body;
+
+  if (!email?.trim() || !first_name?.trim() || !last_name?.trim()) {
+    return res.status(400).json({ error: 'email, first_name and last_name are required' });
+  }
+
+  const normalised = email.trim().toLowerCase();
+  const existing = db.get('SELECT id FROM users WHERE email = ?', [normalised]);
+  if (existing) {
+    return res.status(409).json({ error: 'A user with this email already exists' });
+  }
+
+  const allowed = ['developer', 'lead', 'manager', 'admin'];
+  if (!allowed.includes(role)) {
+    return res.status(400).json({ error: `Invalid role. Must be one of: ${allowed.join(', ')}` });
+  }
+
+  const password_hash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
+
+  const result = db.run(
+    `INSERT INTO users (email, password_hash, first_name, last_name, department, role)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [normalised, password_hash, first_name.trim(), last_name.trim(), department.trim(), role]
+  );
+
+  const newUser = db.get(
+    'SELECT id, email, first_name, last_name, role, department, created_at FROM users WHERE id = ?',
+    [result.lastInsertRowid]
+  );
+  res.status(201).json({ user: newUser });
 });
 
 // ---------- PATCH /api/admin/users/:userId/role ----------
