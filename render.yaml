@@ -4,7 +4,7 @@ services:
     runtime: node
     rootDir: backend
     buildCommand: npm install
-    startCommand: npm run migrate && node seed-profiles.js && npm start
+    startCommand: npm run migrate && node seed-profiles.js; npm start
     envVars:
       - key: NODE_ENV
         value: production
