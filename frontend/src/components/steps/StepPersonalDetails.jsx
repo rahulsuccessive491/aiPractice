@@ -2,11 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { api } from '../../lib/api.js';
 import FormField from '../FormField.jsx';
-
-const DEPARTMENTS = [
-  'Engineering', 'Design', 'Product', 'Data', 'DevOps',
-  'QA', 'AI/ML', 'Marketing', 'Sales', 'Operations', 'HR', 'Finance',
-];
+import { DEPARTMENTS } from '../../lib/constants.js';
 
 const LOCATIONS = [
   'Jaipur', 'Delhi', 'Bangalore', 'Mumbai', 'Hyderabad',

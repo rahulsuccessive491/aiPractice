@@ -2,13 +2,9 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import FormField from '../components/FormField.jsx';
+import { DEPARTMENTS } from '../lib/constants.js';
 
 const ALLOWED_DOMAIN = 'successive.tech';
-
-const DEPARTMENTS = [
-  'Frontend', 'Backend', 'Java', 'PHP', '.NET', 'Node.js',
-  'DevOps', 'QA', 'Data', 'AI/ML', 'Product', 'Design', 'Other',
-];
 
 const empty = {
   first_name: '', last_name: '', mobile: '', department: '',

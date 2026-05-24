@@ -1,7 +1,181 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
 import PageWrapper from '../components/PageWrapper';
+import { AI_MODELS } from '../lib/aiModels';
+
+const BACKEND_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:4000';
+const ALLOWED_EXT = '.jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.xls,.xlsx';
+
+function ActivityCommentThread({ activityId, initialCount, currentUserId }) {
+  const [comments, setComments]   = useState(null);
+  const [open, setOpen]           = useState(false);
+  const [text, setText]           = useState('');
+  const [files, setFiles]         = useState([]);
+  const [posting, setPosting]     = useState(false);
+  const [deleting, setDeleting]   = useState(null);
+  const fileRef                   = useRef(null);
+
+  async function load() {
+    if (comments !== null) return;
+    const res = await api.get(`/activities/${activityId}/comments`);
+    setComments(res.comments || []);
+  }
+
+  function toggle() {
+    if (!open) load();
+    setOpen(o => !o);
+  }
+
+  async function postComment() {
+    if (!text.trim() && files.length === 0) return;
+    setPosting(true);
+    try {
+      const fd = new FormData();
+      fd.append('comment', text.trim());
+      for (const f of files) fd.append('attachments', f);
+      const res = await fetch(
+        `${BACKEND_URL}/api/activities/${activityId}/comments`,
+        { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, body: fd }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      setComments(prev => [...(prev || []), data.comment]);
+      setText('');
+      setFiles([]);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setPosting(false);
+    }
+  }
+
+  async function deleteComment(commentId) {
+    setDeleting(commentId);
+    try {
+      await api.del(`/activities/${activityId}/comments/${commentId}`);
+      setComments(prev => prev.filter(c => c.id !== commentId));
+    } catch {}
+    finally { setDeleting(null); }
+  }
+
+  const count = comments !== null ? comments.length : initialCount;
+
+  return (
+    <div className="mt-2.5">
+      <button
+        onClick={toggle}
+        className="flex items-center gap-1.5 text-xs font-medium text-brand-600 dark:text-brand-400 hover:underline"
+      >
+        💬 {count > 0 ? `${count} comment${count !== 1 ? 's' : ''}` : 'Add feedback'}
+        <span className="text-slate-400 text-[10px]">{open ? '▲' : '▼'}</span>
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-3 space-y-3 border-l-2 border-brand-100 dark:border-brand-900/40 pl-3">
+              {(comments || []).map(c => (
+                <div key={c.id} className="group relative">
+                  <div className="flex items-start gap-2">
+                    {c.commenter.avatar_url ? (
+                      <img src={c.commenter.avatar_url} className="h-6 w-6 rounded-full object-cover shrink-0 mt-0.5" alt="" />
+                    ) : (
+                      <span className="grid h-6 w-6 place-items-center rounded-full bg-brand-600 text-[9px] font-bold text-white shrink-0 mt-0.5">
+                        {c.commenter.first_name[0]}{c.commenter.last_name[0]}
+                      </span>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                          {c.commenter.first_name} {c.commenter.last_name}
+                        </span>
+                        <span className="text-[10px] text-slate-400 capitalize">{c.commenter.role}</span>
+                        <span className="text-[10px] text-slate-400">
+                          · {new Date(c.created_at).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-700 dark:text-slate-300 mt-0.5 whitespace-pre-wrap">{c.comment}</p>
+                      {c.attachments?.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                          {c.attachments.map(a => (
+                            <a key={a.id} href={`${BACKEND_URL}${a.url}`} target="_blank" rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700
+                                         bg-slate-50 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-medium
+                                         text-brand-600 dark:text-brand-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                              📎 {a.original_name}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {(c.commenter.id === currentUserId) && (
+                      <button
+                        onClick={() => deleteComment(c.id)}
+                        disabled={deleting === c.id}
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded text-slate-300 hover:text-rose-500 transition"
+                        title="Delete"
+                      >
+                        🗑
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {/* Reply input */}
+              <div className="pt-1">
+                <textarea
+                  rows={2}
+                  value={text}
+                  onChange={e => setText(e.target.value)}
+                  placeholder="Write a reply…"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900
+                             px-3 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400
+                             focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 resize-none"
+                />
+                {files.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {files.map((f, i) => (
+                      <span key={i} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700
+                                               bg-slate-50 dark:bg-slate-800 px-2 py-0.5 text-[10px] text-slate-600 dark:text-slate-400">
+                        📎 {f.name}
+                        <button onClick={() => setFiles(fs => fs.filter((_, j) => j !== i))} className="text-rose-400 hover:text-rose-600 ml-0.5">×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-center justify-between mt-1.5">
+                  <button type="button" onClick={() => fileRef.current?.click()}
+                    className="text-[10px] font-medium text-slate-500 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
+                    📎 Attach files
+                  </button>
+                  <button
+                    onClick={postComment}
+                    disabled={posting || (!text.trim() && files.length === 0)}
+                    className="rounded-lg bg-brand-600 hover:bg-brand-700 disabled:opacity-40 px-3 py-1
+                               text-xs font-semibold text-white transition-colors"
+                  >
+                    {posting ? 'Posting…' : 'Send →'}
+                  </button>
+                </div>
+                <input ref={fileRef} type="file" multiple accept={ALLOWED_EXT} className="hidden"
+                  onChange={e => setFiles(f => [...f, ...Array.from(e.target.files || [])])} />
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 /* ── constants ───────────────────────────────────────────────── */
 const TYPES = [
@@ -18,14 +192,21 @@ const STATUSES = [
 ];
 
 const TYPE_MAP    = Object.fromEntries(TYPES.map(t => [t.value, t]));
+function localToday() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
 const EMPTY_FORM  = {
   activity_type: 'learning',
   title: '',
   tool_used: '',
+  model_used: '',
   domain: '',
   status: 'completed',
   notes: '',
-  activity_date: new Date().toISOString().split('T')[0],
+  activity_date: localToday(),
+  eta: '',
 };
 
 /* ── small helpers ───────────────────────────────────────────── */
@@ -55,6 +236,7 @@ const itemVariants = {
 
 /* ── component ───────────────────────────────────────────────── */
 export default function ActivityLog() {
+  const { user: currentUser } = useAuth();
   const [tab, setTab]             = useState('form');
   const [form, setForm]           = useState(EMPTY_FORM);
   const [tags, setTags]           = useState([]);
@@ -96,7 +278,15 @@ export default function ActivityLog() {
   }), [activities, filterType, filterStatus]);
 
   /* form handlers */
-  const onChange = e => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+  const onChange = e => {
+    const { name, value } = e.target;
+    setForm(f => {
+      const next = { ...f, [name]: value };
+      if (name === 'tool_used') next.model_used = '';
+      if (name === 'status' && value === 'completed') next.eta = '';
+      return next;
+    });
+  };
 
   const onSubmit = async e => {
     e.preventDefault();
@@ -246,23 +436,39 @@ export default function ActivityLog() {
                   />
                 </div>
 
-                {/* Date + Status */}
+                {/* Status + Date */}
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelCls} htmlFor="activity_date">Date *</label>
-                    <input
-                      id="activity_date" name="activity_date" type="date" required
-                      value={form.activity_date} onChange={onChange}
-                      className={fieldCls}
-                    />
-                  </div>
                   <div>
                     <label className={labelCls} htmlFor="status">Status</label>
                     <select id="status" name="status" value={form.status} onChange={onChange} className={fieldCls}>
                       {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                     </select>
                   </div>
+                  <div>
+                    <label className={labelCls} htmlFor="activity_date">
+                      {form.status === 'in_progress' ? 'Start Date *' : 'Completion Date *'}
+                    </label>
+                    <input
+                      id="activity_date" name="activity_date" type="date" required
+                      value={form.activity_date} onChange={onChange}
+                      max={localToday()}
+                      className={fieldCls}
+                    />
+                  </div>
                 </div>
+
+                {/* ETA — only when In Progress */}
+                {form.status === 'in_progress' && (
+                  <div>
+                    <label className={labelCls} htmlFor="eta">ETA (Expected Completion)</label>
+                    <input
+                      id="eta" name="eta" type="date"
+                      value={form.eta} onChange={onChange}
+                      min={localToday()}
+                      className={fieldCls}
+                    />
+                  </div>
+                )}
 
                 {/* Tool + Domain */}
                 <div className="grid grid-cols-2 gap-4">
@@ -281,6 +487,17 @@ export default function ActivityLog() {
                     </select>
                   </div>
                 </div>
+
+                {/* Model — only when a supported tool is selected */}
+                {form.tool_used && AI_MODELS[form.tool_used] && (
+                  <div>
+                    <label className={labelCls} htmlFor="model_used">Model</label>
+                    <select id="model_used" name="model_used" value={form.model_used} onChange={onChange} className={fieldCls}>
+                      <option value="">— Select model —</option>
+                      {AI_MODELS[form.tool_used].map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                )}
 
                 {/* Notes */}
                 <div>
@@ -388,9 +605,10 @@ export default function ActivityLog() {
                                   {activity.title}
                                 </p>
                                 <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                                  {new Date(activity.activity_date).toLocaleDateString('en', {
-                                    year: 'numeric', month: 'short', day: 'numeric',
-                                  })}
+                                  {activity.status === 'in_progress' && activity.eta
+                                    ? `ETA: ${new Date(activity.eta).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' })}`
+                                    : new Date(activity.activity_date).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' })
+                                  }
                                 </p>
                               </div>
                             </div>
@@ -430,12 +648,14 @@ export default function ActivityLog() {
                             </div>
                           </div>
 
-                          {/* Tool / domain / notes */}
+                          {/* Tool / model / domain / notes */}
                           {(activity.tool_used || activity.domain || activity.notes) && (
                             <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
                               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                                 {activity.tool_used && (
-                                  <span>🔧 <span className="font-medium text-slate-700 dark:text-slate-300">{activity.tool_used}</span></span>
+                                  <span>🔧 <span className="font-medium text-slate-700 dark:text-slate-300">
+                                    {activity.tool_used}{activity.model_used ? ` · ${activity.model_used}` : ''}
+                                  </span></span>
                                 )}
                                 {activity.domain && (
                                   <span>🏷️ <span className="font-medium text-slate-700 dark:text-slate-300">{activity.domain}</span></span>
@@ -446,6 +666,13 @@ export default function ActivityLog() {
                               )}
                             </div>
                           )}
+
+                          {/* Comment thread */}
+                          <ActivityCommentThread
+                            activityId={activity.id}
+                            initialCount={activity.comment_count || 0}
+                            currentUserId={currentUser?.id}
+                          />
                         </motion.li>
                       );
                     })}

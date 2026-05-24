@@ -173,6 +173,19 @@ router.get('/dashboard/chart/adoption-by-team', (req, res) => {
   res.json({ data });
 });
 
+// ---------- GET /api/admin/dashboard/chart/activities-by-model ----------
+// Chart data: model usage distribution across all users
+router.get('/dashboard/chart/activities-by-model', (req, res) => {
+  const data = db.all(`
+    SELECT model_used AS name, COUNT(*) AS count
+    FROM activities
+    WHERE model_used IS NOT NULL AND model_used != ''
+    GROUP BY model_used
+    ORDER BY count DESC
+  `);
+  res.json({ data });
+});
+
 // ---------- GET /api/admin/dashboard/export/csv ----------
 // Export all activities to CSV
 router.get('/dashboard/export/csv', (req, res) => {

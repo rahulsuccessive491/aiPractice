@@ -104,9 +104,10 @@ export default function AllActivities() {
 
   function exportCSV() {
     const rows = (data?.activities || []);
-    const headers = ['Date', 'User', 'Email', 'Team', 'Dept', 'Type', 'Title', 'Tool', 'Domain', 'Status'];
+    const headers = ['Date', 'ETA', 'User', 'Email', 'Team', 'Dept', 'Type', 'Title', 'Tool', 'Model', 'Domain', 'Status'];
     const csvRows = rows.map(a => [
       a.activity_date,
+      a.eta || '',
       `${a.first_name} ${a.last_name}`,
       a.email,
       a.team || '',
@@ -114,6 +115,7 @@ export default function AllActivities() {
       a.activity_type,
       a.title,
       a.tool_used || '',
+      a.model_used || '',
       a.domain || '',
       a.status,
     ]);
@@ -285,12 +287,17 @@ export default function AllActivities() {
                       </td>
                       <td className="px-5 py-3.5 hidden lg:table-cell">
                         <div className="space-y-0.5 text-xs text-slate-500 dark:text-slate-400">
-                          {a.tool_used && <p>🔧 {a.tool_used}</p>}
-                          {a.domain    && <p>🏷️ {a.domain}</p>}
+                          {a.tool_used && (
+                            <p>🔧 {a.tool_used}{a.model_used ? <span className="ml-1 text-slate-400 dark:text-slate-500">· {a.model_used}</span> : null}</p>
+                          )}
+                          {a.domain && <p>🏷️ {a.domain}</p>}
                         </div>
                       </td>
                       <td className="px-5 py-3.5 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                        {new Date(a.activity_date).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' })}
+                        {a.status === 'in_progress' && a.eta
+                          ? <span title="Expected completion">ETA: {new Date(a.eta).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                          : new Date(a.activity_date).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' })
+                        }
                       </td>
                       <td className="px-5 py-3.5">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${

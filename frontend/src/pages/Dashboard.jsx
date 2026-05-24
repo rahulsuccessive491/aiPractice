@@ -67,6 +67,7 @@ export default function Dashboard() {
   const isDark = theme === 'dark';
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [modelData, setModelData] = useState([]);
 
   const gridColor  = isDark ? '#334155' : '#e2e8f0';
   const tickColor  = isDark ? '#94a3b8' : '#64748b';
@@ -76,6 +77,9 @@ export default function Dashboard() {
       .then(r => setActivities(r.activities || []))
       .catch(() => {})
       .finally(() => setLoading(false));
+    api.get('/activities/chart/by-model')
+      .then(r => setModelData(r.data || []))
+      .catch(() => {});
   }, []);
 
   const stats = useMemo(() => {
@@ -224,6 +228,40 @@ export default function Dashboard() {
             )}
           </motion.div>
         </div>
+
+        {/* AI Models Used — only shown when there is model data */}
+        {(loading || modelData.length > 0) && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.42, duration: 0.38 }}
+            className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-soft"
+          >
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-5">AI Models Used</p>
+            {loading ? (
+              <SkeletonBlock className="h-48" />
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie
+                    data={modelData} cx="50%" cy="50%"
+                    innerRadius={58} outerRadius={88}
+                    dataKey="count" nameKey="name"
+                    paddingAngle={3} strokeWidth={0}
+                    animationBegin={0} animationDuration={900}
+                  >
+                    {modelData.map((_, i) => (
+                      <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<ChartTooltip />} />
+                  <Legend iconType="circle" iconSize={8}
+                          wrapperStyle={{ fontSize: 11, color: tickColor }} />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </motion.div>
+        )}
 
         {/* Recent activity + quick actions */}
         <div className="grid gap-6 lg:grid-cols-3">

@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -8,6 +9,7 @@ const morgan = require('morgan');
 const authRouter = require('./routes/auth');
 const usersRouter = require('./routes/users');
 const activitiesRouter = require('./routes/activities');
+const activityCommentsRouter = require('./routes/activityComments');
 const adminRouter = require('./routes/admin');
 const skillsRouter         = require('./routes/skills');
 const notificationsRouter  = require('./routes/notifications');
@@ -34,11 +36,15 @@ app.use(cors({
   credentials: true,
 }));
 
+// ---- static uploads ----
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
 // ---- routes ----
 app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'ai-skills-portal' }));
 app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/activities', activitiesRouter);
+app.use('/api/activities', activityCommentsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/skills',        skillsRouter);
 app.use('/api/notifications', notificationsRouter);
