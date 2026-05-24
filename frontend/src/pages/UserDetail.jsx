@@ -682,7 +682,7 @@ export default function UserDetail() {
                         </div>
                         <div className="flex flex-col items-end gap-1 shrink-0">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${TYPE_COLORS[item.activity_type] ?? ''}`}>
-                            {item.activity_type.replace(/_/g, ' ')}
+                            {(item.activity_type || '').replace(/_/g, ' ')}
                           </span>
                           <span className="text-[11px] text-slate-400">
                             {new Date(item.activity_date).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -702,7 +702,7 @@ export default function UserDetail() {
                   return (
                     <motion.div key={`poc-${item.id}`}
                       initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.16 + i * 0.03 }}
-                      className="py-3 px-3 rounded-xl border-b border-slate-50 dark:border-slate-800 last:border-0
+                      className="py-3 px-3 rounded-xl border-b border-slate-50 dark:border-slate-800 last:border-b-0
                                  border-l-4 border-l-purple-400"
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -745,7 +745,7 @@ export default function UserDetail() {
                   return (
                     <motion.div key={`cert-${item.id}`}
                       initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.16 + i * 0.03 }}
-                      className="py-3 px-3 rounded-xl border-b border-slate-50 dark:border-slate-800 last:border-0
+                      className="py-3 px-3 rounded-xl border-b border-slate-50 dark:border-slate-800 last:border-b-0
                                  border-l-4 border-l-emerald-400"
                     >
                       <div className="flex items-start justify-between gap-3">
