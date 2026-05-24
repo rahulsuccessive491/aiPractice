@@ -126,6 +126,7 @@ const TABS = [
   { id: 'users',     label: 'All Users' },
   { id: 'reviews',   label: 'Pending Approvals' },
   { id: 'profiles',  label: 'Team Profiles' },
+  { id: 'roles',     label: 'Role Management', adminOnly: true },
 ];
 
 /* ── main component ──────────────────────────────────────────── */
@@ -156,6 +157,9 @@ export default function AdminDashboard() {
   const [profileDepts, setProfileDepts] = useState([]);
   const [profileFilters, setProfileFilters] = useState({ dept: '', completed: '', search: '' });
   const [pendingCount, setPendingCount] = useState(0);
+  const [roleSearch, setRoleSearch]     = useState('');
+  const [pendingRole, setPendingRole]   = useState({});   // { [userId]: newRole }
+  const [roleStatus, setRoleStatus]     = useState({});   // { [userId]: 'saving'|'saved'|'error' }
 
   /* access guard */
   if (!user || !['manager', 'admin'].includes(user.role)) {
@@ -223,6 +227,9 @@ export default function AdminDashboard() {
           const res = await api.get(`/admin/profiles?${params}`);
           setProfiles(res.users || []);
           setProfileDepts(res.departments || []);
+        } else if (tab === 'roles') {
+          const res = await api.get('/admin/dashboard/users');
+          setAllUsers(res.users || []);
         }
       } catch (err) {
         setError(err.message || 'Failed to load data');
@@ -344,6 +351,22 @@ export default function AdminDashboard() {
     document.body.appendChild(a); a.click(); URL.revokeObjectURL(url); a.remove();
   }
 
+  async function handleRoleChange(userId) {
+    const newRole = pendingRole[userId];
+    if (!newRole) return;
+    setRoleStatus(s => ({ ...s, [userId]: 'saving' }));
+    try {
+      await api.patch(`/admin/users/${userId}/role`, { role: newRole });
+      setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
+      setPendingRole(p => { const n = { ...p }; delete n[userId]; return n; });
+      setRoleStatus(s => ({ ...s, [userId]: 'saved' }));
+      setTimeout(() => setRoleStatus(s => { const n = { ...s }; delete n[userId]; return n; }), 2000);
+    } catch (err) {
+      setRoleStatus(s => ({ ...s, [userId]: 'error' }));
+      setError(err.message || 'Role update failed');
+    }
+  }
+
   const ROLE_COLORS = {
     admin:     'bg-rose-100   dark:bg-rose-900/40   text-rose-700   dark:text-rose-300',
     manager:   'bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300',
@@ -379,7 +402,7 @@ export default function AdminDashboard() {
 
         {/* Tabs */}
         <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700 overflow-x-auto">
-          {TABS.map(t => (
+          {TABS.filter(t => !t.adminOnly || user.role === 'admin').map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
@@ -932,6 +955,125 @@ export default function AdminDashboard() {
                     {profiles.length === 0 && (
                       <div className="py-12 text-center text-slate-400 dark:text-slate-500 text-sm">
                         No profiles match the current filters.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          )}
+          {/* ── ROLE MANAGEMENT TAB ── */}
+          {tab === 'roles' && (
+            <motion.div key="roles" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+              className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-semibold text-slate-900 dark:text-white">Role Management</h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Promote or demote users between developer, lead and manager roles.</p>
+                </div>
+                <input
+                  type="search"
+                  value={roleSearch}
+                  onChange={e => setRoleSearch(e.target.value)}
+                  placeholder="Search by name or email…"
+                  className="w-full sm:max-w-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900
+                             px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100
+                             focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                />
+              </div>
+
+              {loading ? (
+                <div className="space-y-3">{[...Array(6)].map((_, i) => <Skeleton key={i} className="h-16" />)}</div>
+              ) : (
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-soft">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40">
+                          <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">User</th>
+                          <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Department</th>
+                          <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Current Role</th>
+                          <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Change To</th>
+                          <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {allUsers
+                          .filter(u => `${u.first_name} ${u.last_name} ${u.email}`.toLowerCase().includes(roleSearch.toLowerCase()))
+                          .map((u, i) => {
+                            const isAdmin = u.role === 'admin';
+                            const status  = roleStatus[u.id];
+                            const pending = pendingRole[u.id];
+                            return (
+                              <motion.tr key={u.id}
+                                initial={{ opacity: 0, x: -8 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: i * 0.025 }}
+                                className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                              >
+                                <td className="px-6 py-4">
+                                  <div className="flex items-center gap-3">
+                                    <div className="h-8 w-8 rounded-full bg-brand-600 text-white grid place-items-center text-xs font-bold shrink-0">
+                                      {u.first_name?.[0]}{u.last_name?.[0]}
+                                    </div>
+                                    <div>
+                                      <p className="font-medium text-slate-900 dark:text-white">{u.first_name} {u.last_name}</p>
+                                      <p className="text-xs text-slate-400">{u.email}</p>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">{u.department || '—'}</td>
+                                <td className="px-6 py-4">
+                                  <span className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${ROLE_COLORS[u.role] ?? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>
+                                    {u.role}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4">
+                                  {isAdmin ? (
+                                    <span className="text-xs text-slate-400 italic">Protected</span>
+                                  ) : (
+                                    <select
+                                      value={pending ?? u.role}
+                                      onChange={e => setPendingRole(p => ({ ...p, [u.id]: e.target.value }))}
+                                      className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800
+                                                 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100
+                                                 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                                    >
+                                      <option value="developer">developer</option>
+                                      <option value="lead">lead</option>
+                                      <option value="manager">manager</option>
+                                    </select>
+                                  )}
+                                </td>
+                                <td className="px-6 py-4">
+                                  {!isAdmin && pending && pending !== u.role && (
+                                    <motion.button
+                                      initial={{ opacity: 0, scale: 0.9 }}
+                                      animate={{ opacity: 1, scale: 1 }}
+                                      whileTap={{ scale: 0.95 }}
+                                      onClick={() => handleRoleChange(u.id)}
+                                      disabled={status === 'saving'}
+                                      className="rounded-lg bg-brand-600 hover:bg-brand-700 disabled:opacity-60
+                                                 px-3 py-1.5 text-xs font-semibold text-white transition-colors"
+                                    >
+                                      {status === 'saving' ? 'Saving…' : 'Confirm'}
+                                    </motion.button>
+                                  )}
+                                  {status === 'saved' && (
+                                    <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">✓ Updated</span>
+                                  )}
+                                  {status === 'error' && (
+                                    <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">Failed</span>
+                                  )}
+                                </td>
+                              </motion.tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                    {allUsers.filter(u => `${u.first_name} ${u.last_name} ${u.email}`.toLowerCase().includes(roleSearch.toLowerCase())).length === 0 && (
+                      <div className="py-12 text-center text-slate-400 dark:text-slate-500 text-sm">
+                        No users found matching "{roleSearch}"
                       </div>
                     )}
                   </div>

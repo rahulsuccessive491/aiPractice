@@ -447,4 +447,21 @@ router.get('/users/:userId/profile', (req, res) => {
   res.json({ user: { ...safeUser, profile_completed: safeUser.profile_completed === 1 }, skills, pocs, certifications, activities, activityStats });
 });
 
+// ---------- PATCH /api/admin/users/:userId/role ----------
+// Change a user's role — admin only, cannot target admin accounts
+router.patch('/users/:userId/role', requireRole('admin'), (req, res) => {
+  const { role } = req.body;
+  const allowed = ['developer', 'lead', 'manager'];
+  if (!allowed.includes(role)) {
+    return res.status(400).json({ error: `Invalid role. Must be one of: ${allowed.join(', ')}` });
+  }
+  const target = db.get('SELECT id, email, role FROM users WHERE id = ?', [req.params.userId]);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (target.role === 'admin') {
+    return res.status(403).json({ error: 'Cannot change the role of an admin account' });
+  }
+  db.run('UPDATE users SET role = ?, updated_at = datetime("now") WHERE id = ?', [role, req.params.userId]);
+  res.json({ id: target.id, email: target.email, role });
+});
+
 module.exports = router;
