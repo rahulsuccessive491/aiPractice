@@ -37,7 +37,8 @@ app.use(cors({
 }));
 
 // ---- static uploads ----
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+const UPLOADS_ROOT = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
+app.use('/uploads', express.static(UPLOADS_ROOT));
 
 // ---- routes ----
 app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'ai-skills-portal' }));

@@ -8,7 +8,9 @@ const { notify }       = require('./notifications');
 
 const router = express.Router();
 
-const UPLOAD_DIR = path.join(__dirname, '../../uploads/activity-comments');
+const UPLOAD_DIR = process.env.UPLOAD_DIR
+  ? path.join(process.env.UPLOAD_DIR, 'activity-comments')
+  : path.join(__dirname, '../../uploads/activity-comments');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const ALLOWED_TYPES = new Set([
