@@ -227,7 +227,7 @@ function NotifItem({ notif, isReviewer, currentUser, onRead, onReviewDone, onNav
 // Main bell component
 // ---------------------------------------------------------------------------
 
-const POLL_INTERVAL = 30_000; // 30 s
+const POLL_INTERVAL = 10_000; // 10 s
 
 export default function NotificationBell() {
   const { user } = useAuth();
