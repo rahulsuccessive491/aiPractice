@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { api } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
 import PageWrapper from '../components/PageWrapper';
 
 const PROF_COLORS = {
@@ -57,9 +58,29 @@ function Skeleton({ className = '' }) {
 
 export default function UserDetail() {
   const { userId } = useParams();
-  const [data, setData]     = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState(null);
+  const { user: currentUser } = useAuth();
+  const [data, setData]         = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState(null);
+  const [editingRole, setEditingRole] = useState(false);
+  const [selectedRole, setSelectedRole] = useState('');
+  const [roleSaving, setRoleSaving]   = useState(false);
+  const [roleSaved, setRoleSaved]     = useState(false);
+
+  async function saveRole() {
+    setRoleSaving(true);
+    try {
+      await api.patch(`/admin/users/${userId}/role`, { role: selectedRole });
+      setData(d => ({ ...d, user: { ...d.user, role: selectedRole } }));
+      setEditingRole(false);
+      setRoleSaved(true);
+      setTimeout(() => setRoleSaved(false), 2500);
+    } catch (err) {
+      setError(err.message || 'Role update failed');
+    } finally {
+      setRoleSaving(false);
+    }
+  }
 
   useEffect(() => {
     api.get(`/admin/users/${userId}/profile`)
@@ -140,9 +161,55 @@ export default function UserDetail() {
                 <h1 className="text-xl font-bold text-slate-900 dark:text-white">
                   {user.first_name} {user.last_name}
                 </h1>
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${ROLE_COLORS[user.role] ?? ''}`}>
-                  {user.role}
-                </span>
+
+                {/* Role badge — editable for admins viewing non-admin users */}
+                {editingRole ? (
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={selectedRole}
+                      onChange={e => setSelectedRole(e.target.value)}
+                      autoFocus
+                      className="rounded-lg border border-brand-400 bg-white dark:bg-slate-800 px-2.5 py-1
+                                 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+                    >
+                      <option value="developer">developer</option>
+                      <option value="lead">lead</option>
+                      <option value="manager">manager</option>
+                    </select>
+                    <button
+                      onClick={saveRole}
+                      disabled={roleSaving}
+                      className="rounded-lg bg-brand-600 hover:bg-brand-700 disabled:opacity-60 px-3 py-1 text-xs font-semibold text-white transition-colors"
+                    >
+                      {roleSaving ? 'Saving…' : 'Save'}
+                    </button>
+                    <button
+                      onClick={() => setEditingRole(false)}
+                      className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${ROLE_COLORS[user.role] ?? ''}`}>
+                      {user.role}
+                    </span>
+                    {currentUser?.role === 'admin' && user.role !== 'admin' && (
+                      <button
+                        onClick={() => { setSelectedRole(user.role); setEditingRole(true); }}
+                        title="Change role"
+                        className="rounded-full p-1 text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-500/10 transition-colors"
+                      >
+                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" />
+                        </svg>
+                      </button>
+                    )}
+                    {roleSaved && <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">✓ Updated</span>}
+                  </div>
+                )}
+
                 {user.profile_completed
                   ? <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">✅ Profile Complete</span>
                   : <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">⏳ Profile Pending</span>
