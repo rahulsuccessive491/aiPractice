@@ -445,7 +445,12 @@ router.get('/users/:userId/profile', (req, res) => {
   ).map(c => ({ ...c, no_expiry: c.no_expiry === 1 }));
 
   const activities = db.all(
-    `SELECT * FROM activities WHERE user_id = ? ORDER BY activity_date DESC LIMIT 20`,
+    `SELECT a.*,
+       (SELECT COUNT(*) FROM activity_comments c WHERE c.activity_id = a.id) AS comment_count
+     FROM activities a
+     WHERE a.user_id = ?
+     ORDER BY a.activity_date DESC
+     LIMIT 20`,
     [req.params.userId]
   );
 
