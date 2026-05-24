@@ -460,7 +460,7 @@ router.patch('/users/:userId/role', requireRole('admin'), (req, res) => {
   if (target.role === 'admin') {
     return res.status(403).json({ error: 'Cannot change the role of an admin account' });
   }
-  db.run('UPDATE users SET role = ?, updated_at = datetime("now") WHERE id = ?', [role, req.params.userId]);
+  db.run("UPDATE users SET role = ?, updated_at = datetime('now') WHERE id = ?", [role, req.params.userId]);
   res.json({ id: target.id, email: target.email, role });
 });
 
