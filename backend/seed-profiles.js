@@ -645,9 +645,11 @@ ${rows}
 - A few users across non-engineering departments (HR, Finance, Marketing, Sales) reflect real enterprise AI adoption patterns.
 `;
 
-  const mdPath = path.join(__dirname, '..', 'SEED_PROFILES.md');
-  fs.writeFileSync(mdPath, md, 'utf8');
-  console.log(`\n  📄  Docs written → SEED_PROFILES.md`);
+  try {
+    const mdPath = path.join(__dirname, '..', 'SEED_PROFILES.md');
+    fs.writeFileSync(mdPath, md, 'utf8');
+    console.log(`\n  📄  Docs written → SEED_PROFILES.md`);
+  } catch { /* non-critical — skip on read-only filesystems (e.g. Render) */ }
 
   const stats = db.get('SELECT COUNT(*) as u FROM users');
   const astats = db.get('SELECT COUNT(*) as a FROM activities');
