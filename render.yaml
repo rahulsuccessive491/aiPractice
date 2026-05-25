@@ -4,11 +4,7 @@ services:
     runtime: node
     rootDir: backend
     buildCommand: npm install
-    startCommand: npm run migrate && node seed-profiles.js; npm start
-    disk:
-      name: portal-data
-      mountPath: /var/data
-      sizeGB: 1
+    startCommand: npm run migrate && npm start
     envVars:
       - key: NODE_ENV
         value: production
@@ -18,7 +14,7 @@ services:
         sync: false          # set manually in Render dashboard: https://ai-skills-portal.vercel.app
       - key: NODE_VERSION
         value: 20.18.0
-      - key: DB_FILE
-        value: /var/data/portal.db
-      - key: UPLOAD_DIR
-        value: /var/data/uploads
+      - key: TURSO_DATABASE_URL
+        sync: false          # set manually: libsql://your-db.turso.io
+      - key: TURSO_AUTH_TOKEN
+        sync: false          # set manually: eyJ... token from Turso dashboard

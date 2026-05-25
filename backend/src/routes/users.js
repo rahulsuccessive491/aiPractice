@@ -5,17 +5,17 @@ const { publicUser } = require('./auth');
 const { notify, notifyReviewers, notifyManager } = require('./notifications');
 
 const router = express.Router();
+const wrap = fn => (req, res, next) => fn(req, res, next).catch(next);
 
 // ---------- GET /api/users/me ----------
-router.get('/me', requireAuth, (req, res) => {
-  const user = db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+router.get('/me', requireAuth, wrap(async (req, res) => {
+  const user = await db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json({ user: publicUser(user) });
-});
+}));
 
 // ---------- PATCH /api/users/me ----------
-// Editable fields: first_name, last_name, mobile, department, team_id, tech_stack, ai_tools, bio
-router.patch('/me', requireAuth, (req, res) => {
+router.patch('/me', requireAuth, wrap(async (req, res) => {
   const allowed = [
     'first_name', 'last_name', 'mobile', 'department', 'team_id',
     'tech_stack', 'ai_tools', 'bio', 'profile_completed',
@@ -43,10 +43,9 @@ router.patch('/me', requireAuth, (req, res) => {
   updates.push(`updated_at = datetime('now')`);
   params.push(req.user.id);
 
-  db.run(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);
-  const user = db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+  await db.run(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);
+  const user = await db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
 
-  // Notify manager/admins on profile changes (skip avatar-only updates to avoid noise)
   const profileFields = updates.filter(u => !u.startsWith('avatar_url') && !u.startsWith('updated_at'));
   if (profileFields.length > 0) {
     const actorName = `${user.first_name} ${user.last_name}`;
@@ -60,23 +59,22 @@ router.patch('/me', requireAuth, (req, res) => {
   }
 
   res.json({ user: publicUser(user) });
-});
+}));
 
 // ---------- POST /api/users/me/complete-profile ----------
-router.post('/me/complete-profile', requireAuth, (req, res) => {
-  db.run(
+router.post('/me/complete-profile', requireAuth, wrap(async (req, res) => {
+  await db.run(
     `UPDATE users SET profile_completed = 1, updated_at = datetime('now') WHERE id = ?`,
     [req.user.id]
   );
-  const user = db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+  const user = await db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
   res.json({ user: publicUser(user) });
-});
+}));
 
-// ---------- GET /api/users/search?q=&exclude_self=1 ----------
-// Returns id, full name, email, designation for manager picker.
-router.get('/search', requireAuth, (req, res) => {
+// ---------- GET /api/users/search ----------
+router.get('/search', requireAuth, wrap(async (req, res) => {
   const q    = `%${(req.query.q || '').trim()}%`;
-  const rows = db.all(
+  const rows = await db.all(
     `SELECT id, first_name, last_name, email, designation, department
      FROM users
      WHERE (first_name || ' ' || last_name LIKE ? OR email LIKE ?)
@@ -86,11 +84,10 @@ router.get('/search', requireAuth, (req, res) => {
     [q, q, req.user.id]
   );
   res.json({ users: rows });
-});
+}));
 
 // ---------- POST /api/users/me/avatar ----------
-// Body: { avatar: "data:image/png;base64,..." }  max ~2.7 MB after base64
-router.post('/me/avatar', requireAuth, (req, res) => {
+router.post('/me/avatar', requireAuth, wrap(async (req, res) => {
   const { avatar } = req.body;
   if (!avatar || typeof avatar !== 'string') {
     return res.status(400).json({ error: 'avatar field is required' });
@@ -99,33 +96,31 @@ router.post('/me/avatar', requireAuth, (req, res) => {
   if (!match) {
     return res.status(400).json({ error: 'avatar must be a base64-encoded JPEG, PNG, WebP, or GIF data URL' });
   }
-  // Rough size check: base64 payload ≈ 4/3 of original bytes
   const base64Payload = avatar.split(',')[1] || '';
   const approxBytes   = Math.ceil(base64Payload.length * 0.75);
-  const maxBytes      = 2 * 1024 * 1024; // 2 MB
+  const maxBytes      = 2 * 1024 * 1024;
   if (approxBytes > maxBytes) {
     return res.status(400).json({ error: 'Image must be under 2 MB' });
   }
-  db.run(
+  await db.run(
     `UPDATE users SET avatar_url = ?, updated_at = datetime('now') WHERE id = ?`,
     [avatar, req.user.id]
   );
-  const user = db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+  const user = await db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
   res.json({ user: publicUser(user) });
-});
+}));
 
 // ---------- GET /api/users/me/skills ----------
-router.get('/me/skills', requireAuth, (req, res) => {
-  const skills = db.all(
+router.get('/me/skills', requireAuth, wrap(async (req, res) => {
+  const skills = await db.all(
     'SELECT id, name, category, proficiency FROM user_skills WHERE user_id = ? ORDER BY category, name',
     [req.user.id]
   );
   res.json({ skills });
-});
+}));
 
 // ---------- POST /api/users/me/skills — full replace ----------
-// Body: { skills: [{ name, category, proficiency }] }
-router.post('/me/skills', requireAuth, (req, res) => {
+router.post('/me/skills', requireAuth, wrap(async (req, res) => {
   const { skills } = req.body;
   if (!Array.isArray(skills)) {
     return res.status(400).json({ error: 'skills must be an array' });
@@ -138,25 +133,26 @@ router.post('/me/skills', requireAuth, (req, res) => {
       return res.status(400).json({ error: `proficiency must be one of: ${VALID.join(', ')}` });
     }
   }
-  db.raw.transaction(() => {
-    db.run('DELETE FROM user_skills WHERE user_id = ?', [req.user.id]);
-    const stmt = db.raw.prepare(
-      'INSERT INTO user_skills (user_id, name, category, proficiency) VALUES (?, ?, ?, ?)'
-    );
-    for (const s of skills) {
-      stmt.run(req.user.id, s.name.trim(), s.category.trim(), s.proficiency || 'Beginner');
-    }
-  })();
-  const saved = db.all(
+
+  const stmts = [
+    { sql: 'DELETE FROM user_skills WHERE user_id = ?', args: [req.user.id] },
+    ...skills.map(s => ({
+      sql: 'INSERT INTO user_skills (user_id, name, category, proficiency) VALUES (?, ?, ?, ?)',
+      args: [req.user.id, s.name.trim(), s.category.trim(), s.proficiency || 'Beginner'],
+    })),
+  ];
+  await db.batch(stmts);
+
+  const saved = await db.all(
     'SELECT id, name, category, proficiency FROM user_skills WHERE user_id = ? ORDER BY category, name',
     [req.user.id]
   );
   res.json({ skills: saved });
-});
+}));
 
 // ---------- GET /api/users/me/pocs ----------
-router.get('/me/pocs', requireAuth, (req, res) => {
-  const rows = db.all(
+router.get('/me/pocs', requireAuth, wrap(async (req, res) => {
+  const rows = await db.all(
     'SELECT * FROM user_pocs WHERE user_id = ? ORDER BY created_at ASC',
     [req.user.id]
   );
@@ -166,11 +162,10 @@ router.get('/me/pocs', requireAuth, (req, res) => {
     team_members: db.parseJson(r.team_members, []),
   }));
   res.json({ pocs });
-});
+}));
 
 // ---------- POST /api/users/me/pocs — full replace ----------
-// Body: { pocs: [ { poc_name, category, ... } ] }
-router.post('/me/pocs', requireAuth, (req, res) => {
+router.post('/me/pocs', requireAuth, wrap(async (req, res) => {
   const { pocs } = req.body;
   if (!Array.isArray(pocs)) {
     return res.status(400).json({ error: 'pocs must be an array' });
@@ -181,17 +176,19 @@ router.post('/me/pocs', requireAuth, (req, res) => {
     }
   }
 
-  db.raw.transaction(() => {
-    db.run('DELETE FROM user_pocs WHERE user_id = ?', [req.user.id]);
-    const stmt = db.raw.prepare(`
-      INSERT INTO user_pocs
-        (user_id, poc_name, category, problem_statement, tools_stack, team_members,
-         poc_lead, status, progress, expected_outcome, business_impact,
-         repo_link, challenges, next_steps, remarks, start_date, end_date, last_updated)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
-    `);
-    for (const p of pocs) {
-      stmt.run(
+  const insertSql = `
+    INSERT INTO user_pocs
+      (user_id, poc_name, category, problem_statement, tools_stack, team_members,
+       poc_lead, status, progress, expected_outcome, business_impact,
+       repo_link, challenges, next_steps, remarks, start_date, end_date, last_updated)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+  `;
+
+  const stmts = [
+    { sql: 'DELETE FROM user_pocs WHERE user_id = ?', args: [req.user.id] },
+    ...pocs.map(p => ({
+      sql: insertSql,
+      args: [
         req.user.id,
         p.poc_name.trim(),
         p.category || 'GenAI',
@@ -209,15 +206,15 @@ router.post('/me/pocs', requireAuth, (req, res) => {
         p.remarks          || null,
         p.start_date       || null,
         p.end_date         || null,
-      );
-    }
-  })();
+      ],
+    })),
+  ];
+  await db.batch(stmts);
 
-  const saved = db.all('SELECT * FROM user_pocs WHERE user_id = ? ORDER BY created_at ASC', [req.user.id]);
+  const saved = await db.all('SELECT * FROM user_pocs WHERE user_id = ? ORDER BY created_at ASC', [req.user.id]);
 
-  // Notify manager/admins that POC details were updated
   if (pocs.length > 0) {
-    const pocActor = db.get('SELECT first_name, last_name FROM users WHERE id = ?', [req.user.id]);
+    const pocActor = await db.get('SELECT first_name, last_name FROM users WHERE id = ?', [req.user.id]);
     const pocActorName = `${pocActor.first_name} ${pocActor.last_name}`;
     notifyManager(
       req.user.id,
@@ -229,30 +226,28 @@ router.post('/me/pocs', requireAuth, (req, res) => {
   }
 
   res.json({ pocs: saved.map(r => ({ ...r, tools_stack: db.parseJson(r.tools_stack,[]), team_members: db.parseJson(r.team_members,[]) })) });
-});
+}));
 
 // ---------- GET /api/users/me/certifications ----------
-router.get('/me/certifications', requireAuth, (req, res) => {
-  const rows = db.all(
+router.get('/me/certifications', requireAuth, wrap(async (req, res) => {
+  const rows = await db.all(
     `SELECT id, cert_name, issuing_org, issue_date, expiry_date, no_expiry,
             credential_id, credential_url, file_name, file_type,
             status, reviewer_comment, reviewed_at, created_at
      FROM user_certifications WHERE user_id = ? ORDER BY created_at DESC`,
     [req.user.id]
   );
-  // file_data excluded from list — fetched individually to keep payload small
   res.json({ certifications: rows.map(r => ({ ...r, no_expiry: r.no_expiry === 1 })) });
-});
+}));
 
-// ---------- POST /api/users/me/certifications — add one cert ----------
-router.post('/me/certifications', requireAuth, (req, res) => {
+// ---------- POST /api/users/me/certifications ----------
+router.post('/me/certifications', requireAuth, wrap(async (req, res) => {
   const { cert_name, issuing_org, issue_date, expiry_date, no_expiry,
           credential_id, credential_url, file_data, file_name, file_type } = req.body;
 
   if (!cert_name?.trim())   return res.status(400).json({ error: 'cert_name is required' });
   if (!issuing_org?.trim()) return res.status(400).json({ error: 'issuing_org is required' });
 
-  // File size guard: base64 of 10 MB ≈ 13.3 MB string
   if (file_data) {
     const approxBytes = Math.ceil((file_data.split(',')[1] || '').length * 0.75);
     if (approxBytes > 10 * 1024 * 1024) {
@@ -260,7 +255,7 @@ router.post('/me/certifications', requireAuth, (req, res) => {
     }
   }
 
-  const result = db.run(
+  const result = await db.run(
     `INSERT INTO user_certifications
        (user_id, cert_name, issuing_org, issue_date, expiry_date, no_expiry,
         credential_id, credential_url, file_data, file_name, file_type, status)
@@ -280,15 +275,14 @@ router.post('/me/certifications', requireAuth, (req, res) => {
     ]
   );
 
-  const cert = db.get(
+  const cert = await db.get(
     `SELECT id, cert_name, issuing_org, issue_date, expiry_date, no_expiry,
             credential_id, credential_url, file_name, file_type,
             status, reviewer_comment, reviewed_at, created_at
      FROM user_certifications WHERE id = ?`,
     [result.lastInsertRowid]
   );
-  // Notify all leads/managers/admins about the new submission
-  const actor = db.get('SELECT first_name, last_name FROM users WHERE id = ?', [req.user.id]);
+  const actor = await db.get('SELECT first_name, last_name FROM users WHERE id = ?', [req.user.id]);
   const actorName = `${actor.first_name} ${actor.last_name}`;
   notifyReviewers(
     req.user.id,
@@ -300,11 +294,11 @@ router.post('/me/certifications', requireAuth, (req, res) => {
   );
 
   res.status(201).json({ certification: { ...cert, no_expiry: cert.no_expiry === 1 } });
-});
+}));
 
-// ---------- DELETE /api/users/me/certifications/:id — only if Pending ----------
-router.delete('/me/certifications/:id', requireAuth, (req, res) => {
-  const cert = db.get(
+// ---------- DELETE /api/users/me/certifications/:id ----------
+router.delete('/me/certifications/:id', requireAuth, wrap(async (req, res) => {
+  const cert = await db.get(
     'SELECT id, status FROM user_certifications WHERE id = ? AND user_id = ?',
     [req.params.id, req.user.id]
   );
@@ -312,22 +306,22 @@ router.delete('/me/certifications/:id', requireAuth, (req, res) => {
   if (cert.status !== 'Pending') {
     return res.status(403).json({ error: 'Only pending certifications can be deleted' });
   }
-  db.run('DELETE FROM user_certifications WHERE id = ?', [cert.id]);
+  await db.run('DELETE FROM user_certifications WHERE id = ?', [cert.id]);
   res.json({ ok: true });
-});
+}));
 
-// ---------- GET /api/users/me/certifications/:id/file — fetch file_data ----------
-router.get('/me/certifications/:id/file', requireAuth, (req, res) => {
-  const row = db.get(
+// ---------- GET /api/users/me/certifications/:id/file ----------
+router.get('/me/certifications/:id/file', requireAuth, wrap(async (req, res) => {
+  const row = await db.get(
     'SELECT file_data, file_name, file_type FROM user_certifications WHERE id = ? AND user_id = ?',
     [req.params.id, req.user.id]
   );
   if (!row || !row.file_data) return res.status(404).json({ error: 'File not found' });
   res.json({ file_data: row.file_data, file_name: row.file_name, file_type: row.file_type });
-});
+}));
 
-// ---------- PATCH /api/users/certifications/:id/review (manager/admin only) ----------
-router.patch('/certifications/:id/review', requireAuth, (req, res) => {
+// ---------- PATCH /api/users/certifications/:id/review ----------
+router.patch('/certifications/:id/review', requireAuth, wrap(async (req, res) => {
   if (!['lead', 'manager', 'admin'].includes(req.user.role)) {
     return res.status(403).json({ error: 'Only leads, managers, or admins can review certifications' });
   }
@@ -335,10 +329,10 @@ router.patch('/certifications/:id/review', requireAuth, (req, res) => {
   if (!['Approved', 'Rejected'].includes(status)) {
     return res.status(400).json({ error: 'status must be Approved or Rejected' });
   }
-  const cert = db.get('SELECT * FROM user_certifications WHERE id = ?', [req.params.id]);
+  const cert = await db.get('SELECT * FROM user_certifications WHERE id = ?', [req.params.id]);
   if (!cert) return res.status(404).json({ error: 'Certification not found' });
 
-  db.run(
+  await db.run(
     `UPDATE user_certifications
      SET status = ?, reviewer_id = ?, reviewer_comment = ?,
          reviewed_at = datetime('now'), updated_at = datetime('now')
@@ -346,8 +340,7 @@ router.patch('/certifications/:id/review', requireAuth, (req, res) => {
     [status, req.user.id, comment || null, cert.id]
   );
 
-  // Notify the cert owner
-  const reviewer = db.get('SELECT first_name, last_name FROM users WHERE id = ?', [req.user.id]);
+  const reviewer     = await db.get('SELECT first_name, last_name FROM users WHERE id = ?', [req.user.id]);
   const reviewerName = `${reviewer.first_name} ${reviewer.last_name}`;
   const icon = status === 'Approved' ? '✅' : '❌';
   notify(
@@ -360,24 +353,24 @@ router.patch('/certifications/:id/review', requireAuth, (req, res) => {
     'certification', cert.id
   );
 
-  const updated = db.get(
+  const updated = await db.get(
     `SELECT id, cert_name, issuing_org, status, reviewer_comment, reviewed_at
      FROM user_certifications WHERE id = ?`,
     [cert.id]
   );
   res.json({ certification: updated });
-});
+}));
 
 // ---------- GET /api/users/teams ----------
-router.get('/teams', requireAuth, (req, res) => {
-  const teams = db.all('SELECT id, name, description FROM teams ORDER BY name');
+router.get('/teams', requireAuth, wrap(async (req, res) => {
+  const teams = await db.all('SELECT id, name, description FROM teams ORDER BY name');
   res.json({ teams });
-});
+}));
 
 // ---------- GET /api/users/tags ----------
-router.get('/tags', requireAuth, (req, res) => {
-  const tags = db.all('SELECT id, name, kind FROM tags ORDER BY kind, name');
+router.get('/tags', requireAuth, wrap(async (req, res) => {
+  const tags = await db.all('SELECT id, name, kind FROM tags ORDER BY kind, name');
   res.json({ tags });
-});
+}));
 
 module.exports = router;

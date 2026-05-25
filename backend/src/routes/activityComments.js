@@ -7,6 +7,7 @@ const { requireAuth }  = require('../middleware/auth');
 const { notify }       = require('./notifications');
 
 const router = express.Router();
+const wrap = fn => (req, res, next) => fn(req, res, next).catch(next);
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR
   ? path.join(process.env.UPLOAD_DIR, 'activity-comments')
@@ -32,7 +33,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (ALLOWED_TYPES.has(file.mimetype)) cb(null, true);
     else cb(new Error(`File type not allowed: ${file.mimetype}`));
@@ -43,22 +44,23 @@ function canAccessActivity(activity, user) {
   return activity.user_id === user.id || ['lead', 'manager', 'admin'].includes(user.role);
 }
 
-function attachmentsForComment(commentId) {
-  return db.all(
+async function attachmentsForComment(commentId) {
+  const rows = await db.all(
     `SELECT id, filename, original_name, mimetype, size FROM activity_comment_attachments WHERE comment_id = ?`,
     [commentId]
-  ).map(a => ({ ...a, url: `/uploads/activity-comments/${a.filename}` }));
+  );
+  return rows.map(a => ({ ...a, url: `/uploads/activity-comments/${a.filename}` }));
 }
 
 // ---------- GET /api/activities/:id/comments ----------
-router.get('/:id/comments', requireAuth, (req, res) => {
-  const activity = db.get('SELECT * FROM activities WHERE id = ?', [req.params.id]);
+router.get('/:id/comments', requireAuth, wrap(async (req, res) => {
+  const activity = await db.get('SELECT * FROM activities WHERE id = ?', [req.params.id]);
   if (!activity) return res.status(404).json({ error: 'Activity not found' });
   if (!canAccessActivity(activity, req.user)) {
     return res.status(403).json({ error: 'Not authorized' });
   }
 
-  const comments = db.all(
+  const rows = await db.all(
     `SELECT ac.id, ac.comment, ac.created_at, ac.commenter_id,
             u.first_name, u.last_name, u.avatar_url, u.role
      FROM activity_comments ac
@@ -66,7 +68,9 @@ router.get('/:id/comments', requireAuth, (req, res) => {
      WHERE ac.activity_id = ?
      ORDER BY ac.created_at ASC`,
     [req.params.id]
-  ).map(c => ({
+  );
+
+  const comments = await Promise.all(rows.map(async c => ({
     id:         c.id,
     comment:    c.comment,
     created_at: c.created_at,
@@ -77,15 +81,15 @@ router.get('/:id/comments', requireAuth, (req, res) => {
       avatar_url: c.avatar_url,
       role:       c.role,
     },
-    attachments: attachmentsForComment(c.id),
-  }));
+    attachments: await attachmentsForComment(c.id),
+  })));
 
   res.json({ comments });
-});
+}));
 
 // ---------- POST /api/activities/:id/comments ----------
-router.post('/:id/comments', requireAuth, upload.array('attachments', 5), (req, res) => {
-  const activity = db.get('SELECT * FROM activities WHERE id = ?', [req.params.id]);
+router.post('/:id/comments', requireAuth, upload.array('attachments', 5), wrap(async (req, res) => {
+  const activity = await db.get('SELECT * FROM activities WHERE id = ?', [req.params.id]);
   if (!activity) return res.status(404).json({ error: 'Activity not found' });
 
   const isOwner   = activity.user_id === req.user.id;
@@ -97,26 +101,23 @@ router.post('/:id/comments', requireAuth, upload.array('attachments', 5), (req, 
   const comment = (req.body.comment || '').trim();
   if (!comment) return res.status(400).json({ error: 'comment is required' });
 
-  const result = db.run(
+  const result = await db.run(
     `INSERT INTO activity_comments (activity_id, commenter_id, comment) VALUES (?, ?, ?)`,
     [activity.id, req.user.id, comment]
   );
   const commentId = result.lastInsertRowid;
 
-  // Save attachments
   for (const file of (req.files || [])) {
-    db.run(
+    await db.run(
       `INSERT INTO activity_comment_attachments (comment_id, filename, original_name, mimetype, size)
        VALUES (?, ?, ?, ?, ?)`,
       [commentId, file.filename, file.originalname, file.mimetype, file.size]
     );
   }
 
-  // Notifications
   const commenterName = `${req.user.first_name} ${req.user.last_name}`;
   if (isOwner && !isManager) {
-    // Developer commented → notify reporting manager + leads/managers who previously commented
-    const owner = db.get('SELECT reporting_manager_id FROM users WHERE id = ?', [req.user.id]);
+    const owner = await db.get('SELECT reporting_manager_id FROM users WHERE id = ?', [req.user.id]);
     const notified = new Set();
     if (owner?.reporting_manager_id) {
       notify(owner.reporting_manager_id, req.user.id, 'activity_commented',
@@ -124,8 +125,7 @@ router.post('/:id/comments', requireAuth, upload.array('attachments', 5), (req, 
         comment.slice(0, 120), 'activity', activity.id);
       notified.add(owner.reporting_manager_id);
     }
-    // Also notify any lead/manager/admin who has commented before
-    const priorCommenters = db.all(
+    const priorCommenters = await db.all(
       `SELECT DISTINCT ac.commenter_id FROM activity_comments ac
        JOIN users u ON u.id = ac.commenter_id
        WHERE ac.activity_id = ? AND ac.commenter_id != ? AND u.role IN ('lead','manager','admin')`,
@@ -140,7 +140,6 @@ router.post('/:id/comments', requireAuth, upload.array('attachments', 5), (req, 
       }
     }
   } else {
-    // Manager/lead commented → notify activity owner
     notify(activity.user_id, req.user.id, 'activity_commented',
       `${commenterName} left feedback on your activity`,
       comment.slice(0, 120), 'activity', activity.id);
@@ -157,14 +156,14 @@ router.post('/:id/comments', requireAuth, upload.array('attachments', 5), (req, 
       avatar_url: req.user.avatar_url,
       role:       req.user.role,
     },
-    attachments: attachmentsForComment(commentId),
+    attachments: await attachmentsForComment(commentId),
   };
   res.status(201).json({ comment: newComment });
-});
+}));
 
 // ---------- DELETE /api/activities/:id/comments/:commentId ----------
-router.delete('/:id/comments/:commentId', requireAuth, (req, res) => {
-  const comment = db.get('SELECT * FROM activity_comments WHERE id = ?', [req.params.commentId]);
+router.delete('/:id/comments/:commentId', requireAuth, wrap(async (req, res) => {
+  const comment = await db.get('SELECT * FROM activity_comments WHERE id = ?', [req.params.commentId]);
   if (!comment) return res.status(404).json({ error: 'Comment not found' });
   if (comment.activity_id !== Number(req.params.id)) {
     return res.status(400).json({ error: 'Comment does not belong to this activity' });
@@ -173,16 +172,15 @@ router.delete('/:id/comments/:commentId', requireAuth, (req, res) => {
   const canDelete = comment.commenter_id === req.user.id || req.user.role === 'admin';
   if (!canDelete) return res.status(403).json({ error: 'Not authorized to delete this comment' });
 
-  // Delete attachment files from disk
-  const attachments = db.all(
+  const attachments = await db.all(
     'SELECT filename FROM activity_comment_attachments WHERE comment_id = ?', [comment.id]
   );
   for (const a of attachments) {
     try { fs.unlinkSync(path.join(UPLOAD_DIR, a.filename)); } catch {}
   }
 
-  db.run('DELETE FROM activity_comments WHERE id = ?', [comment.id]);
+  await db.run('DELETE FROM activity_comments WHERE id = ?', [comment.id]);
   res.json({ ok: true });
-});
+}));
 
 module.exports = router;
