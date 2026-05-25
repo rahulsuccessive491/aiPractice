@@ -308,15 +308,15 @@ export default function ActivityLog() {
   /* fetch history when switching to history tab */
   const loadActivities = () => {
     setHistLoading(true);
-    Promise.all([
+    Promise.allSettled([
       api.get('/activities'),
       api.get('/users/me/pocs'),
       api.get('/users/me/certifications'),
     ])
-      .then(([actRes, pocRes, certRes]) => {
-        setActivities(actRes.activities || []);
-        setPocs(pocRes.pocs || []);
-        setCerts(certRes.certifications || []);
+      .then(([actS, pocS, certS]) => {
+        setActivities(actS.status  === 'fulfilled' ? (actS.value.activities       || []) : []);
+        setPocs(      pocS.status  === 'fulfilled' ? (pocS.value.pocs             || []) : []);
+        setCerts(     certS.status === 'fulfilled' ? (certS.value.certifications  || []) : []);
       })
       .catch(() => {})
       .finally(() => setHistLoading(false));
