@@ -464,9 +464,9 @@ router.post('/users', requireRole('admin'), wrap(async (req, res) => {
   const password_hash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
 
   const result = await db.run(
-    `INSERT INTO users (email, password_hash, first_name, last_name, department, role)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [normalised, password_hash, first_name.trim(), last_name.trim(), department.trim(), role]
+    `INSERT INTO users (email, password_hash, first_name, last_name, mobile, department, role)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [normalised, password_hash, first_name.trim(), last_name.trim(), '', department.trim(), role]
   );
 
   const newUser = await db.get(
