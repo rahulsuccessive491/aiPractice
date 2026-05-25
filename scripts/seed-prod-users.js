@@ -14,12 +14,12 @@ const ADMIN_EMAIL    = process.env.ADMIN_EMAIL;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 const USERS = [
-  { first_name: 'Arjun',  last_name: 'Mehta',    email: 'arjun.mehta@successive.tech',    role: 'developer' },
-  { first_name: 'Sneha',  last_name: 'Kulkarni', email: 'sneha.kulkarni@successive.tech', role: 'lead'      },
-  { first_name: 'Vikram', last_name: 'Desai',    email: 'vikram.desai@successive.tech',   role: 'manager'   },
-  { first_name: 'Neha',   last_name: 'Kapoor',   email: 'neha.kapoor@successive.tech',    role: 'admin'     },
-  { first_name: 'Amit',   last_name: '',          email: 'amit@successive.tech',           role: 'admin'     },
-  { first_name: 'Sumit',  last_name: '',          email: 'sumit@successive.tech',          role: 'admin'     },
+  { first_name: 'Arjun',  last_name: 'Mehta',    email: 'arjun.mehta@successive.tech',    role: 'developer', mobile: '' },
+  { first_name: 'Sneha',  last_name: 'Kulkarni', email: 'sneha.kulkarni@successive.tech', role: 'lead',      mobile: '' },
+  { first_name: 'Vikram', last_name: 'Desai',    email: 'vikram.desai@successive.tech',   role: 'manager',   mobile: '' },
+  { first_name: 'Neha',   last_name: 'Kapoor',   email: 'neha.kapoor@successive.tech',    role: 'admin',     mobile: '' },
+  { first_name: 'Amit',   last_name: '',          email: 'amit@successive.tech',           role: 'admin',     mobile: '' },
+  { first_name: 'Sumit',  last_name: '',          email: 'sumit@successive.tech',          role: 'admin',     mobile: '' },
 ];
 
 async function json(res) { try { return await res.json(); } catch { return {}; } }
