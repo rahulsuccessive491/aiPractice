@@ -7,6 +7,7 @@ const DEFAULT_PASSWORD = 'Profile@123';
 
 const router = express.Router();
 const wrap = fn => (req, res, next) => fn(req, res, next).catch(next);
+const safeJson = (v, fallback = null) => { try { return JSON.parse(v); } catch { return fallback; } };
 
 router.use(requireAuth);
 router.use((req, res, next) => {
@@ -231,12 +232,13 @@ router.get('/reviews', wrap(async (req, res) => {
   const params = [];
   const clauses = [];
 
-  if (status) {
+  if (status && status !== 'all') {
     clauses.push('uc.status = ?');
     params.push(status);
-  } else {
+  } else if (!status) {
     clauses.push("uc.status = 'Pending'");
   }
+  // status=all → no filter, return all statuses
   if (dept) {
     clauses.push('u.department = ?');
     params.push(dept);
@@ -273,6 +275,37 @@ router.get('/reviews', wrap(async (req, res) => {
   res.json({
     certifications: certs.map(c => ({ ...c, no_expiry: c.no_expiry === 1 })),
     pending_count: pending.c,
+  });
+}));
+
+// ---------- GET /api/admin/pocs ----------
+router.get('/pocs', wrap(async (req, res) => {
+  const { user, dept, status, from, to } = req.query;
+  const args = [];
+  const where = ['1=1'];
+
+  if (user)   { where.push(`(u.first_name || ' ' || u.last_name LIKE ? OR u.email LIKE ?)`); args.push(`%${user}%`, `%${user}%`); }
+  if (dept)   { where.push('u.department = ?');  args.push(dept); }
+  if (status) { where.push('p.status = ?');      args.push(status); }
+  if (from)   { where.push('p.start_date >= ?'); args.push(from); }
+  if (to)     { where.push('p.start_date <= ?'); args.push(to); }
+
+  const rows = await db.all(
+    `SELECT p.id, p.poc_name, p.category, p.tools_stack, p.status, p.progress,
+            p.start_date, p.end_date, p.created_at,
+            u.id AS user_id, u.first_name, u.last_name, u.email,
+            u.department, u.designation, u.avatar_url,
+            t.name AS team
+     FROM user_pocs p
+     JOIN users u ON u.id = p.user_id
+     LEFT JOIN teams t ON t.id = u.team_id
+     WHERE ${where.join(' AND ')}
+     ORDER BY p.start_date DESC, p.created_at DESC`,
+    args
+  );
+
+  res.json({
+    pocs: rows.map(r => ({ ...r, tools_stack: safeJson(r.tools_stack, []) })),
   });
 }));
 
