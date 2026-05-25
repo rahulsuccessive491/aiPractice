@@ -3,12 +3,13 @@ const db = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
+const wrap = fn => (req, res, next) => fn(req, res, next).catch(next);
 
 const ACTIVITY_TYPES = ['learning', 'practice_project', 'agent_built', 'code_review', 'certification'];
 const ACTIVITY_STATUS = ['in_progress', 'completed'];
 
 // ---------- POST /api/activities ----------
-router.post('/', requireAuth, (req, res) => {
+router.post('/', requireAuth, wrap(async (req, res) => {
   const { activity_type, title, tool_used, model_used, domain, status, notes, activity_date, eta } = req.body;
 
   if (!activity_type || !ACTIVITY_TYPES.includes(activity_type)) {
@@ -28,7 +29,6 @@ router.post('/', requireAuth, (req, res) => {
   }
 
   const actStatus = status || 'completed';
-  // Parse as local midnight (not UTC) to avoid timezone-ahead rejection for today's date
   const [ay, am, ad] = activity_date.split('-').map(Number);
   const actDate = new Date(ay, am - 1, ad);
   const today = new Date();
@@ -45,7 +45,7 @@ router.post('/', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'activity_date cannot be more than 1 year in the past' });
   }
 
-  const result = db.run(
+  const result = await db.run(
     `INSERT INTO activities (user_id, activity_type, title, tool_used, model_used, domain, status, notes, activity_date, eta)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
@@ -56,13 +56,13 @@ router.post('/', requireAuth, (req, res) => {
     ]
   );
 
-  const activity = db.get('SELECT * FROM activities WHERE id = ?', [result.lastInsertRowid]);
+  const activity = await db.get('SELECT * FROM activities WHERE id = ?', [result.lastInsertRowid]);
   res.status(201).json({ activity });
-});
+}));
 
 // ---------- GET /api/activities ----------
-router.get('/', requireAuth, (req, res) => {
-  const activities = db.all(
+router.get('/', requireAuth, wrap(async (req, res) => {
+  const activities = await db.all(
     `SELECT a.*,
        (SELECT COUNT(*) FROM activity_comments c WHERE c.activity_id = a.id) AS comment_count
      FROM activities a
@@ -71,11 +71,11 @@ router.get('/', requireAuth, (req, res) => {
     [req.user.id]
   );
   res.json({ activities });
-});
+}));
 
 // ---------- GET /api/activities/chart/by-model ----------
-router.get('/chart/by-model', requireAuth, (req, res) => {
-  const rows = db.all(
+router.get('/chart/by-model', requireAuth, wrap(async (req, res) => {
+  const rows = await db.all(
     `SELECT model_used AS name, COUNT(*) AS count
      FROM activities
      WHERE user_id = ? AND model_used IS NOT NULL AND model_used != ''
@@ -84,11 +84,11 @@ router.get('/chart/by-model', requireAuth, (req, res) => {
     [req.user.id]
   );
   res.json({ data: rows });
-});
+}));
 
 // ---------- GET /api/activities/:id ----------
-router.get('/:id', requireAuth, (req, res) => {
-  const activity = db.get('SELECT * FROM activities WHERE id = ?', [req.params.id]);
+router.get('/:id', requireAuth, wrap(async (req, res) => {
+  const activity = await db.get('SELECT * FROM activities WHERE id = ?', [req.params.id]);
   if (!activity) return res.status(404).json({ error: 'Activity not found' });
 
   if (activity.user_id !== req.user.id && !['manager', 'admin'].includes(req.user.role)) {
@@ -96,11 +96,11 @@ router.get('/:id', requireAuth, (req, res) => {
   }
 
   res.json({ activity });
-});
+}));
 
 // ---------- PATCH /api/activities/:id ----------
-router.patch('/:id', requireAuth, (req, res) => {
-  const activity = db.get('SELECT * FROM activities WHERE id = ?', [req.params.id]);
+router.patch('/:id', requireAuth, wrap(async (req, res) => {
+  const activity = await db.get('SELECT * FROM activities WHERE id = ?', [req.params.id]);
   if (!activity) return res.status(404).json({ error: 'Activity not found' });
 
   if (activity.user_id !== req.user.id && req.user.role !== 'admin') {
@@ -140,36 +140,36 @@ router.patch('/:id', requireAuth, (req, res) => {
   updates.push(`updated_at = datetime('now')`);
   params.push(req.params.id);
 
-  db.run(`UPDATE activities SET ${updates.join(', ')} WHERE id = ?`, params);
-  const updated = db.get('SELECT * FROM activities WHERE id = ?', [req.params.id]);
+  await db.run(`UPDATE activities SET ${updates.join(', ')} WHERE id = ?`, params);
+  const updated = await db.get('SELECT * FROM activities WHERE id = ?', [req.params.id]);
   res.json({ activity: updated });
-});
+}));
 
 // ---------- DELETE /api/activities/:id ----------
-router.delete('/:id', requireAuth, (req, res) => {
-  const activity = db.get('SELECT * FROM activities WHERE id = ?', [req.params.id]);
+router.delete('/:id', requireAuth, wrap(async (req, res) => {
+  const activity = await db.get('SELECT * FROM activities WHERE id = ?', [req.params.id]);
   if (!activity) return res.status(404).json({ error: 'Activity not found' });
 
   if (activity.user_id !== req.user.id && req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Not authorized to delete this activity' });
   }
 
-  db.run('DELETE FROM activities WHERE id = ?', [req.params.id]);
+  await db.run('DELETE FROM activities WHERE id = ?', [req.params.id]);
   res.json({ ok: true });
-});
+}));
 
 // ---------- GET /api/activities/user/:userId ----------
-router.get('/user/:userId', requireAuth, (req, res) => {
+router.get('/user/:userId', requireAuth, wrap(async (req, res) => {
   if (req.user.role !== 'manager' && req.user.role !== 'admin') {
     return res.status(403).json({ error: "Not authorized to view other users' activities" });
   }
 
-  const activities = db.all(
+  const activities = await db.all(
     `SELECT * FROM activities WHERE user_id = ? ORDER BY activity_date DESC, created_at DESC`,
     [req.params.userId]
   );
 
   res.json({ activities });
-});
+}));
 
 module.exports = router;

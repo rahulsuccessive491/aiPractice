@@ -6,8 +6,8 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const DEFAULT_PASSWORD = 'Profile@123';
 
 const router = express.Router();
+const wrap = fn => (req, res, next) => fn(req, res, next).catch(next);
 
-// All admin routes require authentication + manager or admin role
 router.use(requireAuth);
 router.use((req, res, next) => {
   if (!['manager', 'admin'].includes(req.user.role)) {
@@ -17,25 +17,21 @@ router.use((req, res, next) => {
 });
 
 // ---------- GET /api/admin/dashboard/overview ----------
-// High-level summary: total users, activities this week/month
-router.get('/dashboard/overview', (req, res) => {
-  const totalUsers = db.get('SELECT COUNT(*) as count FROM users');
-  const totalActivities = db.get('SELECT COUNT(*) as count FROM activities');
+router.get('/dashboard/overview', wrap(async (req, res) => {
+  const totalUsers      = await db.get('SELECT COUNT(*) as count FROM users');
+  const totalActivities = await db.get('SELECT COUNT(*) as count FROM activities');
 
-  // Activities this week (last 7 days)
-  const thisWeek = db.get(`
+  const thisWeek = await db.get(`
     SELECT COUNT(*) as count FROM activities
     WHERE activity_date >= date('now', '-7 days')
   `);
 
-  // Activities this month (last 30 days)
-  const thisMonth = db.get(`
+  const thisMonth = await db.get(`
     SELECT COUNT(*) as count FROM activities
     WHERE activity_date >= date('now', '-30 days')
   `);
 
-  // Top activity types
-  const topActivityTypes = db.all(`
+  const topActivityTypes = await db.all(`
     SELECT activity_type, COUNT(*) as count
     FROM activities
     GROUP BY activity_type
@@ -43,8 +39,7 @@ router.get('/dashboard/overview', (req, res) => {
     LIMIT 5
   `);
 
-  // Top domains
-  const topDomains = db.all(`
+  const topDomains = await db.all(`
     SELECT domain, COUNT(*) as count
     FROM activities
     WHERE domain IS NOT NULL AND domain != ''
@@ -61,12 +56,11 @@ router.get('/dashboard/overview', (req, res) => {
     topActivityTypes,
     topDomains,
   });
-});
+}));
 
 // ---------- GET /api/admin/dashboard/team-breakdown ----------
-// Activities by team with adoption percentage
-router.get('/dashboard/team-breakdown', (req, res) => {
-  const teams = db.all(`
+router.get('/dashboard/team-breakdown', wrap(async (req, res) => {
+  const teams = await db.all(`
     SELECT t.id, t.name,
            COUNT(DISTINCT u.id) as total_members,
            COUNT(DISTINCT CASE WHEN a.id IS NOT NULL THEN u.id END) as members_with_activities,
@@ -84,27 +78,25 @@ router.get('/dashboard/team-breakdown', (req, res) => {
   }));
 
   res.json({ teams: enriched });
-});
+}));
 
 // ---------- GET /api/admin/dashboard/user/:userId ----------
-// View a specific user's activities and progress
-router.get('/dashboard/user/:userId', (req, res) => {
-  const user = db.get(`
+router.get('/dashboard/user/:userId', wrap(async (req, res) => {
+  const user = await db.get(`
     SELECT id, email, first_name, last_name, team_id, role, tech_stack, ai_tools, bio, created_at
     FROM users WHERE id = ?
   `, [req.params.userId]);
 
   if (!user) return res.status(404).json({ error: 'User not found' });
 
-  const activities = db.all(`
+  const activities = await db.all(`
     SELECT * FROM activities
     WHERE user_id = ?
     ORDER BY activity_date DESC
   `, [req.params.userId]);
 
-  // Parse JSON fields
   if (user.tech_stack) user.tech_stack = db.parseJson(user.tech_stack, []);
-  if (user.ai_tools) user.ai_tools = db.parseJson(user.ai_tools, []);
+  if (user.ai_tools)   user.ai_tools   = db.parseJson(user.ai_tools,   []);
 
   res.json({
     user: {
@@ -114,38 +106,33 @@ router.get('/dashboard/user/:userId', (req, res) => {
     },
     activities,
   });
-});
+}));
 
 // ---------- GET /api/admin/dashboard/chart/activities-by-type ----------
-// Chart data: activities grouped by type
-router.get('/dashboard/chart/activities-by-type', (req, res) => {
-  const data = db.all(`
+router.get('/dashboard/chart/activities-by-type', wrap(async (req, res) => {
+  const data = await db.all(`
     SELECT activity_type as label, COUNT(*) as count
     FROM activities
     GROUP BY activity_type
     ORDER BY count DESC
   `);
-
   res.json({ data });
-});
+}));
 
 // ---------- GET /api/admin/dashboard/chart/activities-by-domain ----------
-// Chart data: activities grouped by domain
-router.get('/dashboard/chart/activities-by-domain', (req, res) => {
-  const data = db.all(`
+router.get('/dashboard/chart/activities-by-domain', wrap(async (req, res) => {
+  const data = await db.all(`
     SELECT COALESCE(domain, 'Uncategorized') as label, COUNT(*) as count
     FROM activities
     GROUP BY domain
     ORDER BY count DESC
   `);
-
   res.json({ data });
-});
+}));
 
 // ---------- GET /api/admin/dashboard/chart/activities-by-team ----------
-// Chart data: activities grouped by team
-router.get('/dashboard/chart/activities-by-team', (req, res) => {
-  const data = db.all(`
+router.get('/dashboard/chart/activities-by-team', wrap(async (req, res) => {
+  const data = await db.all(`
     SELECT t.name as label, COUNT(a.id) as count
     FROM teams t
     LEFT JOIN users u ON u.team_id = t.id
@@ -153,14 +140,12 @@ router.get('/dashboard/chart/activities-by-team', (req, res) => {
     GROUP BY t.id
     ORDER BY count DESC
   `);
-
   res.json({ data });
-});
+}));
 
 // ---------- GET /api/admin/dashboard/chart/adoption-by-team ----------
-// Chart data: adoption percentage by team
-router.get('/dashboard/chart/adoption-by-team', (req, res) => {
-  const data = db.all(`
+router.get('/dashboard/chart/adoption-by-team', wrap(async (req, res) => {
+  const data = await db.all(`
     SELECT t.name as label,
            CASE WHEN COUNT(DISTINCT u.id) > 0
                 THEN ROUND(COUNT(DISTINCT CASE WHEN a.id IS NOT NULL THEN u.id END) * 100.0 / COUNT(DISTINCT u.id), 1)
@@ -172,14 +157,12 @@ router.get('/dashboard/chart/adoption-by-team', (req, res) => {
     GROUP BY t.id
     ORDER BY value DESC
   `);
-
   res.json({ data });
-});
+}));
 
 // ---------- GET /api/admin/dashboard/chart/activities-by-model ----------
-// Chart data: model usage distribution across all users
-router.get('/dashboard/chart/activities-by-model', (req, res) => {
-  const data = db.all(`
+router.get('/dashboard/chart/activities-by-model', wrap(async (req, res) => {
+  const data = await db.all(`
     SELECT model_used AS name, COUNT(*) AS count
     FROM activities
     WHERE model_used IS NOT NULL AND model_used != ''
@@ -187,12 +170,11 @@ router.get('/dashboard/chart/activities-by-model', (req, res) => {
     ORDER BY count DESC
   `);
   res.json({ data });
-});
+}));
 
 // ---------- GET /api/admin/dashboard/export/csv ----------
-// Export all activities to CSV
-router.get('/dashboard/export/csv', (req, res) => {
-  const activities = db.all(`
+router.get('/dashboard/export/csv', wrap(async (req, res) => {
+  const activities = await db.all(`
     SELECT a.id, a.created_at, u.email, u.first_name, u.last_name, t.name as team,
            a.activity_type, a.title, a.tool_used, a.domain, a.status, a.activity_date, a.notes
     FROM activities a
@@ -201,7 +183,6 @@ router.get('/dashboard/export/csv', (req, res) => {
     ORDER BY a.activity_date DESC
   `);
 
-  // Build CSV
   const headers = ['Date', 'User', 'Team', 'Activity Type', 'Title', 'Tool', 'Domain', 'Status', 'Notes'];
   const rows = activities.map(a => [
     new Date(a.activity_date).toLocaleDateString(),
@@ -228,12 +209,11 @@ router.get('/dashboard/export/csv', (req, res) => {
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', `attachment; filename="activities-${new Date().toISOString().split('T')[0]}.csv"`);
   res.send(csv);
-});
+}));
 
 // ---------- GET /api/admin/dashboard/users ----------
-// List all users with activity counts
-router.get('/dashboard/users', (req, res) => {
-  const users = db.all(`
+router.get('/dashboard/users', wrap(async (req, res) => {
+  const users = await db.all(`
     SELECT u.id, u.email, u.first_name, u.last_name, u.role, t.name as team,
            COUNT(a.id) as activity_count
     FROM users u
@@ -242,14 +222,11 @@ router.get('/dashboard/users', (req, res) => {
     GROUP BY u.id
     ORDER BY activity_count DESC
   `);
-
   res.json({ users });
-});
+}));
 
 // ---------- GET /api/admin/reviews ----------
-// Pending certifications with user + reviewer info for approval table
-// ?dept=&status=Pending|Approved|Rejected&from=YYYY-MM-DD&to=YYYY-MM-DD
-router.get('/reviews', (req, res) => {
+router.get('/reviews', wrap(async (req, res) => {
   const { dept, status, from, to } = req.query;
   const params = [];
   const clauses = [];
@@ -275,7 +252,7 @@ router.get('/reviews', (req, res) => {
 
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
 
-  const certs = db.all(`
+  const certs = await db.all(`
     SELECT uc.id, uc.cert_name, uc.issuing_org, uc.issue_date, uc.expiry_date, uc.no_expiry,
            uc.credential_id, uc.credential_url, uc.file_name, uc.file_type,
            uc.status, uc.reviewer_comment, uc.reviewed_at, uc.created_at,
@@ -289,20 +266,18 @@ router.get('/reviews', (req, res) => {
     ORDER BY uc.created_at DESC
   `, params);
 
-  const pending_count = db.get(
+  const pending = await db.get(
     "SELECT COUNT(*) AS c FROM user_certifications WHERE status = 'Pending'"
-  ).c;
+  );
 
   res.json({
     certifications: certs.map(c => ({ ...c, no_expiry: c.no_expiry === 1 })),
-    pending_count,
+    pending_count: pending.c,
   });
-});
+}));
 
 // ---------- GET /api/admin/profiles ----------
-// All users with profile completion stats
-// ?dept=&completed=0|1&search=
-router.get('/profiles', (req, res) => {
+router.get('/profiles', wrap(async (req, res) => {
   const { dept, completed, search } = req.query;
   const params = [];
   const clauses = [];
@@ -323,7 +298,7 @@ router.get('/profiles', (req, res) => {
 
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
 
-  const users = db.all(`
+  const users = await db.all(`
     SELECT u.id, u.first_name, u.last_name, u.email, u.role, u.department, u.designation,
            u.profile_completed, u.avatar_url, u.location, u.date_of_joining,
            t.name AS team,
@@ -337,7 +312,7 @@ router.get('/profiles', (req, res) => {
     ORDER BY u.profile_completed ASC, u.first_name, u.last_name
   `, params);
 
-  const departments = db.all(
+  const departments = await db.all(
     `SELECT DISTINCT department FROM users WHERE department IS NOT NULL AND department != '' ORDER BY department`
   );
 
@@ -345,12 +320,10 @@ router.get('/profiles', (req, res) => {
     users: users.map(u => ({ ...u, profile_completed: u.profile_completed === 1 })),
     departments: departments.map(d => d.department),
   });
-});
+}));
 
 // ---------- GET /api/admin/activities ----------
-// All activities across all users with filters
-// ?dept=&team=&type=&domain=&status=&user=&from=&to=&page=&limit=
-router.get('/activities', (req, res) => {
+router.get('/activities', wrap(async (req, res) => {
   const { dept, team, type, domain, status, user: userSearch, from, to } = req.query;
   const page  = Math.max(1, Number(req.query.page  || 1));
   const limit = Math.min(100, Math.max(10, Number(req.query.limit || 50)));
@@ -374,7 +347,7 @@ router.get('/activities', (req, res) => {
   const where  = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   const offset = (page - 1) * limit;
 
-  const { count: total } = db.get(`
+  const countRow = await db.get(`
     SELECT COUNT(*) as count
     FROM activities a
     JOIN users u ON a.user_id = u.id
@@ -382,7 +355,7 @@ router.get('/activities', (req, res) => {
     ${where}
   `, params);
 
-  const activities = db.all(`
+  const activities = await db.all(`
     SELECT a.id, a.activity_type, a.title, a.tool_used, a.domain, a.status,
            a.notes, a.activity_date, a.created_at,
            u.id as user_id, u.first_name, u.last_name, u.email,
@@ -396,23 +369,22 @@ router.get('/activities', (req, res) => {
     LIMIT ? OFFSET ?
   `, [...params, limit, offset]);
 
-  const departments = db.all(
+  const departments = (await db.all(
     `SELECT DISTINCT department FROM users WHERE department IS NOT NULL AND department != '' ORDER BY department`
-  ).map(d => d.department);
+  )).map(d => d.department);
 
-  const teams = db.all(`SELECT DISTINCT name FROM teams ORDER BY name`).map(t => t.name);
+  const teams = (await db.all(`SELECT DISTINCT name FROM teams ORDER BY name`)).map(t => t.name);
 
-  const domains = db.all(
+  const domains = (await db.all(
     `SELECT DISTINCT domain FROM activities WHERE domain IS NOT NULL AND domain != '' ORDER BY domain`
-  ).map(d => d.domain);
+  )).map(d => d.domain);
 
-  res.json({ activities, total, page, limit, departments, teams, domains });
-});
+  res.json({ activities, total: countRow.count, page, limit, departments, teams, domains });
+}));
 
 // ---------- GET /api/admin/users/:userId/profile ----------
-// Full profile view for a single user (admin/manager access)
-router.get('/users/:userId/profile', (req, res) => {
-  const user = db.get(`
+router.get('/users/:userId/profile', wrap(async (req, res) => {
+  const user = await db.get(`
     SELECT u.*,
            t.name  AS team_name,
            rm.first_name AS manager_first,
@@ -428,26 +400,28 @@ router.get('/users/:userId/profile', (req, res) => {
   if (user.tech_stack) user.tech_stack = db.parseJson(user.tech_stack, []);
   if (user.ai_tools)   user.ai_tools   = db.parseJson(user.ai_tools,   []);
 
-  const skills = db.all(
+  const skills = await db.all(
     `SELECT * FROM user_skills WHERE user_id = ? ORDER BY category, name`,
     [req.params.userId]
   );
 
-  const pocs = db.all(
+  const pocRows = await db.all(
     `SELECT * FROM user_pocs WHERE user_id = ? ORDER BY created_at DESC`,
     [req.params.userId]
-  ).map(p => ({
+  );
+  const pocs = pocRows.map(p => ({
     ...p,
     tools_stack:  db.parseJson(p.tools_stack,  []),
     team_members: db.parseJson(p.team_members, []),
   }));
 
-  const certifications = db.all(
+  const certRows = await db.all(
     `SELECT * FROM user_certifications WHERE user_id = ? ORDER BY created_at DESC`,
     [req.params.userId]
-  ).map(c => ({ ...c, no_expiry: c.no_expiry === 1 }));
+  );
+  const certifications = certRows.map(c => ({ ...c, no_expiry: c.no_expiry === 1 }));
 
-  const activities = db.all(
+  const activities = await db.all(
     `SELECT a.*,
        (SELECT COUNT(*) FROM activity_comments c WHERE c.activity_id = a.id) AS comment_count
      FROM activities a
@@ -457,7 +431,7 @@ router.get('/users/:userId/profile', (req, res) => {
     [req.params.userId]
   );
 
-  const activityStats = db.get(`
+  const activityStats = await db.get(`
     SELECT COUNT(*) as total,
            COUNT(CASE WHEN status = 'completed' THEN 1 END)                           as completed,
            COUNT(CASE WHEN activity_date >= date('now', '-30 days') THEN 1 END)       as this_month
@@ -466,11 +440,10 @@ router.get('/users/:userId/profile', (req, res) => {
 
   const { password_hash, ...safeUser } = user;
   res.json({ user: { ...safeUser, profile_completed: safeUser.profile_completed === 1 }, skills, pocs, certifications, activities, activityStats });
-});
+}));
 
 // ---------- POST /api/admin/users ----------
-// Admin creates a new user account with default password Profile@123
-router.post('/users', requireRole('admin'), async (req, res) => {
+router.post('/users', requireRole('admin'), wrap(async (req, res) => {
   const { email, first_name, last_name, role = 'developer', department = '' } = req.body;
 
   if (!email?.trim() || !first_name?.trim() || !last_name?.trim()) {
@@ -478,7 +451,7 @@ router.post('/users', requireRole('admin'), async (req, res) => {
   }
 
   const normalised = email.trim().toLowerCase();
-  const existing = db.get('SELECT id FROM users WHERE email = ?', [normalised]);
+  const existing = await db.get('SELECT id FROM users WHERE email = ?', [normalised]);
   if (existing) {
     return res.status(409).json({ error: 'A user with this email already exists' });
   }
@@ -490,34 +463,33 @@ router.post('/users', requireRole('admin'), async (req, res) => {
 
   const password_hash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
 
-  const result = db.run(
+  const result = await db.run(
     `INSERT INTO users (email, password_hash, first_name, last_name, department, role)
      VALUES (?, ?, ?, ?, ?, ?)`,
     [normalised, password_hash, first_name.trim(), last_name.trim(), department.trim(), role]
   );
 
-  const newUser = db.get(
+  const newUser = await db.get(
     'SELECT id, email, first_name, last_name, role, department, created_at FROM users WHERE id = ?',
     [result.lastInsertRowid]
   );
   res.status(201).json({ user: newUser });
-});
+}));
 
 // ---------- PATCH /api/admin/users/:userId/role ----------
-// Change a user's role — admin only, cannot target admin accounts
-router.patch('/users/:userId/role', requireRole('admin'), (req, res) => {
+router.patch('/users/:userId/role', requireRole('admin'), wrap(async (req, res) => {
   const { role } = req.body;
   const allowed = ['developer', 'lead', 'manager'];
   if (!allowed.includes(role)) {
     return res.status(400).json({ error: `Invalid role. Must be one of: ${allowed.join(', ')}` });
   }
-  const target = db.get('SELECT id, email, role FROM users WHERE id = ?', [req.params.userId]);
+  const target = await db.get('SELECT id, email, role FROM users WHERE id = ?', [req.params.userId]);
   if (!target) return res.status(404).json({ error: 'User not found' });
   if (target.role === 'admin') {
     return res.status(403).json({ error: 'Cannot change the role of an admin account' });
   }
-  db.run("UPDATE users SET role = ?, updated_at = datetime('now') WHERE id = ?", [role, req.params.userId]);
+  await db.run("UPDATE users SET role = ?, updated_at = datetime('now') WHERE id = ?", [role, req.params.userId]);
   res.json({ id: target.id, email: target.email, role });
-});
+}));
 
 module.exports = router;

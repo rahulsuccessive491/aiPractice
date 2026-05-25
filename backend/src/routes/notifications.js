@@ -1,19 +1,18 @@
 const express = require('express');
 const db = require('../db');
 const { requireAuth } = require('../middleware/auth');
-const { publicUser } = require('./auth');
 
 const router = express.Router();
+const wrap = fn => (req, res, next) => fn(req, res, next).catch(next);
 
 // ---------------------------------------------------------------------------
-// Shared helper — called by other routes to fire a notification
-// notify(recipientId, actorId, type, title, body, entityType, entityId)
+// Shared helpers — async, fire-and-forget safe (errors caught internally)
 // ---------------------------------------------------------------------------
 
-function notify(recipientId, actorId, type, title, body, entityType = null, entityId = null) {
+async function notify(recipientId, actorId, type, title, body, entityType = null, entityId = null) {
   if (!recipientId) return;
   try {
-    db.run(
+    await db.run(
       `INSERT INTO notifications
          (recipient_id, actor_id, type, title, body, entity_type, entity_id)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -24,40 +23,44 @@ function notify(recipientId, actorId, type, title, body, entityType = null, enti
   }
 }
 
-// Notify all leads/managers/admins in the system (used for cert submissions etc.)
-function notifyReviewers(actorId, type, title, body, entityType, entityId) {
-  const reviewers = db.all(
-    `SELECT id FROM users WHERE role IN ('lead','manager','admin') AND id != ?`,
-    [actorId]
-  );
-  for (const r of reviewers) {
-    notify(r.id, actorId, type, title, body, entityType, entityId);
+async function notifyReviewers(actorId, type, title, body, entityType, entityId) {
+  try {
+    const reviewers = await db.all(
+      `SELECT id FROM users WHERE role IN ('lead','manager','admin') AND id != ?`,
+      [actorId]
+    );
+    for (const r of reviewers) {
+      await notify(r.id, actorId, type, title, body, entityType, entityId);
+    }
+  } catch (err) {
+    console.error('[notifyReviewers] failed:', err.message);
   }
 }
 
-// Notify the actor's reporting manager (if set)
-function notifyManager(actorId, type, title, body, entityType, entityId) {
-  const actor = db.get('SELECT reporting_manager_id FROM users WHERE id = ?', [actorId]);
-  if (actor?.reporting_manager_id) {
-    notify(actor.reporting_manager_id, actorId, type, title, body, entityType, entityId);
-  }
-  // Also notify all admins
-  const admins = db.all(
-    `SELECT id FROM users WHERE role = 'admin' AND id != ?`, [actorId]
-  );
-  for (const a of admins) {
-    notify(a.id, actorId, type, title, body, entityType, entityId);
+async function notifyManager(actorId, type, title, body, entityType, entityId) {
+  try {
+    const actor = await db.get('SELECT reporting_manager_id FROM users WHERE id = ?', [actorId]);
+    if (actor?.reporting_manager_id) {
+      await notify(actor.reporting_manager_id, actorId, type, title, body, entityType, entityId);
+    }
+    const admins = await db.all(
+      `SELECT id FROM users WHERE role = 'admin' AND id != ?`, [actorId]
+    );
+    for (const a of admins) {
+      await notify(a.id, actorId, type, title, body, entityType, entityId);
+    }
+  } catch (err) {
+    console.error('[notifyManager] failed:', err.message);
   }
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/notifications  — current user's notifications (newest first)
-// ?unread=1  to filter unread only
+// GET /api/notifications
 // ---------------------------------------------------------------------------
 
-router.get('/', requireAuth, (req, res) => {
+router.get('/', requireAuth, wrap(async (req, res) => {
   const onlyUnread = req.query.unread === '1';
-  const rows = db.all(
+  const rows = await db.all(
     `SELECT n.id, n.type, n.title, n.body, n.entity_type, n.entity_id,
             n.actor_id,
             n.read, n.action_taken, n.created_at,
@@ -71,44 +74,42 @@ router.get('/', requireAuth, (req, res) => {
      LIMIT 50`,
     [req.user.id]
   );
-  const unread_count = db.get(
+  const countRow = await db.get(
     'SELECT COUNT(*) AS c FROM notifications WHERE recipient_id = ? AND read = 0',
     [req.user.id]
-  ).c;
-  res.json({ notifications: rows, unread_count });
-});
+  );
+  res.json({ notifications: rows, unread_count: countRow.c });
+}));
 
 // ---------------------------------------------------------------------------
 // PATCH /api/notifications/:id/read
 // ---------------------------------------------------------------------------
 
-router.patch('/:id/read', requireAuth, (req, res) => {
-  db.run(
+router.patch('/:id/read', requireAuth, wrap(async (req, res) => {
+  await db.run(
     'UPDATE notifications SET read = 1 WHERE id = ? AND recipient_id = ?',
     [req.params.id, req.user.id]
   );
   res.json({ ok: true });
-});
+}));
 
 // ---------------------------------------------------------------------------
 // PATCH /api/notifications/read-all
 // ---------------------------------------------------------------------------
 
-router.patch('/read-all', requireAuth, (req, res) => {
-  db.run(
+router.patch('/read-all', requireAuth, wrap(async (req, res) => {
+  await db.run(
     'UPDATE notifications SET read = 1 WHERE recipient_id = ?',
     [req.user.id]
   );
   res.json({ ok: true });
-});
+}));
 
 // ---------------------------------------------------------------------------
 // POST /api/notifications/review/:certId
-// Reviewer approves/rejects directly from the notification panel.
-// Body: { status: 'Approved'|'Rejected', comment: string, notification_id: number }
 // ---------------------------------------------------------------------------
 
-router.post('/review/:certId', requireAuth, (req, res) => {
+router.post('/review/:certId', requireAuth, wrap(async (req, res) => {
   if (!['lead', 'manager', 'admin'].includes(req.user.role)) {
     return res.status(403).json({ error: 'Only leads, managers, or admins can review certifications' });
   }
@@ -118,14 +119,13 @@ router.post('/review/:certId', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'status must be Approved or Rejected' });
   }
 
-  const cert = db.get('SELECT * FROM user_certifications WHERE id = ?', [req.params.certId]);
+  const cert = await db.get('SELECT * FROM user_certifications WHERE id = ?', [req.params.certId]);
   if (!cert) return res.status(404).json({ error: 'Certification not found' });
   if (cert.status !== 'Pending') {
     return res.status(409).json({ error: 'Certification has already been reviewed' });
   }
 
-  // Update cert status
-  db.run(
+  await db.run(
     `UPDATE user_certifications
      SET status = ?, reviewer_id = ?, reviewer_comment = ?,
          reviewed_at = datetime('now'), updated_at = datetime('now')
@@ -133,33 +133,30 @@ router.post('/review/:certId', requireAuth, (req, res) => {
     [status, req.user.id, comment || null, cert.id]
   );
 
-  // Mark notification as actioned
   if (notification_id) {
-    db.run(
+    await db.run(
       'UPDATE notifications SET action_taken = 1, read = 1 WHERE id = ? AND recipient_id = ?',
       [notification_id, req.user.id]
     );
   }
 
-  // Get reviewer name for notification back to the cert owner
-  const reviewer = db.get('SELECT first_name, last_name FROM users WHERE id = ?', [req.user.id]);
+  const reviewer     = await db.get('SELECT first_name, last_name FROM users WHERE id = ?', [req.user.id]);
   const reviewerName = `${reviewer.first_name} ${reviewer.last_name}`;
 
-  // Notify the cert owner
-  const icon    = status === 'Approved' ? '✅' : '❌';
+  const icon       = status === 'Approved' ? '✅' : '❌';
   const notifTitle = `${icon} Certificate ${status}`;
   const notifBody  = comment
     ? `${reviewerName} ${status.toLowerCase()} your certificate "${cert.cert_name}": "${comment}"`
     : `${reviewerName} ${status.toLowerCase()} your certificate "${cert.cert_name}".`;
   notify(cert.user_id, req.user.id, 'cert_reviewed', notifTitle, notifBody, 'certification', cert.id);
 
-  const updated = db.get(
+  const updated = await db.get(
     `SELECT id, cert_name, issuing_org, status, reviewer_comment, reviewed_at
      FROM user_certifications WHERE id = ?`,
     [cert.id]
   );
   res.json({ certification: updated });
-});
+}));
 
 module.exports = router;
 module.exports.notify           = notify;
