@@ -17,6 +17,9 @@ const notificationsRouter  = require('./routes/notifications');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// Log DB path on startup so Render logs confirm which file is being used
+console.log(`[DB] Using database file: ${process.env.DB_FILE || '(fallback: backend/data/portal.db)'}`);
+
 // ---- middleware ----
 app.use(helmet());
 app.use(express.json({ limit: '4mb' })); // raised to support base64 avatar uploads (~2 MB image → ~2.7 MB base64)
