@@ -3,10 +3,7 @@ const db = require('../db');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
-
-// ---------------------------------------------------------------------------
-// Skills taxonomy — keyed by category
-// ---------------------------------------------------------------------------
+const wrap = fn => (req, res, next) => fn(req, res, next).catch(next);
 
 const TAXONOMY = {
   Frontend: [
@@ -85,22 +82,13 @@ const TAXONOMY = {
 
 const CATEGORIES = Object.keys(TAXONOMY);
 
-// ---------------------------------------------------------------------------
 // GET /api/skills/categories
-// ---------------------------------------------------------------------------
-
 router.get('/categories', requireAuth, (_req, res) => {
   res.json({ categories: CATEGORIES });
 });
 
-// ---------------------------------------------------------------------------
-// GET /api/skills/suggestions?category=Frontend[&department=Engineering]
-// Returns the taxonomy list for the category, optionally enriched by department.
-// The "AI suggestion" logic: if user's department matches a category we bubble
-// those skills to the top of the response, simulating AI prioritisation.
-// ---------------------------------------------------------------------------
-
-router.get('/suggestions', requireAuth, (req, res) => {
+// GET /api/skills/suggestions
+router.get('/suggestions', requireAuth, wrap(async (req, res) => {
   const { category, department } = req.query;
 
   if (!category || !TAXONOMY[category]) {
@@ -109,14 +97,11 @@ router.get('/suggestions', requireAuth, (req, res) => {
 
   const base = TAXONOMY[category];
 
-  // Fetch skills the user already has so the UI can mark them pre-selected.
-  const existing = db.all(
+  const existing = (await db.all(
     'SELECT name FROM user_skills WHERE user_id = ?',
     [req.user.id]
-  ).map(r => r.name);
+  )).map(r => r.name);
 
-  // "AI enrichment": if the user's department string hints at a related category,
-  // append a few cross-category skills as suggestions.
   const extras = [];
   if (department) {
     const dept = department.toLowerCase();
@@ -135,7 +120,7 @@ router.get('/suggestions', requireAuth, (req, res) => {
     skills: allSkills,
     already_selected: existing,
   });
-});
+}));
 
 module.exports = router;
 module.exports.TAXONOMY = TAXONOMY;

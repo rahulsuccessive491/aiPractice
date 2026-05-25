@@ -6,6 +6,7 @@ const db = require('../db');
 const { validateRegistration, validateLogin } = require('../middleware/validation');
 
 const router = express.Router();
+const wrap = fn => (req, res, next) => fn(req, res, next).catch(next);
 
 function signToken(user) {
   return jwt.sign(
@@ -41,12 +42,12 @@ function publicUser(row) {
 }
 
 // ---------- POST /api/auth/register ----------
-router.post('/register', async (req, res) => {
+router.post('/register', wrap(async (req, res) => {
   const { ok, errors } = validateRegistration(req.body);
   if (!ok) return res.status(400).json({ error: 'Validation failed', fields: errors });
 
   const email = req.body.email.trim().toLowerCase();
-  const existing = db.get('SELECT id FROM users WHERE email = ?', [email]);
+  const existing = await db.get('SELECT id FROM users WHERE email = ?', [email]);
   if (existing) {
     return res.status(409).json({
       error: 'Email already registered',
@@ -56,7 +57,7 @@ router.post('/register', async (req, res) => {
 
   const password_hash = await bcrypt.hash(req.body.password, 10);
 
-  const result = db.run(
+  const result = await db.run(
     `INSERT INTO users (email, password_hash, first_name, last_name, mobile, department)
      VALUES (?, ?, ?, ?, ?, ?)`,
     [
@@ -69,18 +70,18 @@ router.post('/register', async (req, res) => {
     ]
   );
 
-  const user = db.get('SELECT * FROM users WHERE id = ?', [result.lastInsertRowid]);
+  const user = await db.get('SELECT * FROM users WHERE id = ?', [result.lastInsertRowid]);
   const token = signToken(user);
   return res.status(201).json({ token, user: publicUser(user) });
-});
+}));
 
 // ---------- POST /api/auth/login ----------
-router.post('/login', async (req, res) => {
+router.post('/login', wrap(async (req, res) => {
   const { ok, errors } = validateLogin(req.body);
   if (!ok) return res.status(400).json({ error: 'Validation failed', fields: errors });
 
   const email = req.body.email.trim().toLowerCase();
-  const user = db.get('SELECT * FROM users WHERE email = ?', [email]);
+  const user = await db.get('SELECT * FROM users WHERE email = ?', [email]);
   if (!user) return res.status(401).json({ error: 'Invalid email or password' });
 
   const match = await bcrypt.compare(req.body.password, user.password_hash);
@@ -88,7 +89,7 @@ router.post('/login', async (req, res) => {
 
   const token = signToken(user);
   return res.json({ token, user: publicUser(user) });
-});
+}));
 
 module.exports = router;
 module.exports.publicUser = publicUser;
