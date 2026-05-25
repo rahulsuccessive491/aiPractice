@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../lib/api';
@@ -64,6 +64,8 @@ export default function AllActivities() {
   });
   const [page, setPage]           = useState(1);
   const [data, setData]           = useState(null);
+  const [pocs, setPocs]           = useState([]);
+  const [certs, setCerts]         = useState([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
   const [options, setOptions]     = useState({ departments: [], teams: [], domains: [] });
@@ -81,10 +83,28 @@ export default function AllActivities() {
       if (f.status) params.set('status', f.status);
       if (f.from)   params.set('from',   f.from);
       if (f.to)     params.set('to',     f.to);
-      const res = await api.get(`/admin/activities?${params}`);
-      setData(res);
+
+      const pocParams = new URLSearchParams();
+      if (f.user) pocParams.set('user', f.user);
+      if (f.dept) pocParams.set('dept', f.dept);
+      if (f.from) pocParams.set('from', f.from);
+      if (f.to)   pocParams.set('to',   f.to);
+
+      const certParams = new URLSearchParams({ status: 'all' });
+      if (f.dept) certParams.set('dept', f.dept);
+      if (f.from) certParams.set('from', f.from);
+      if (f.to)   certParams.set('to',   f.to);
+
+      const [actRes, pocRes, certRes] = await Promise.all([
+        api.get(`/admin/activities?${params}`),
+        api.get(`/admin/pocs?${pocParams}`),
+        api.get(`/admin/reviews?${certParams}`),
+      ]);
+      setData(actRes);
+      setPocs(pocRes.pocs || []);
+      setCerts(certRes.certifications || []);
       if (!options.departments.length) {
-        setOptions({ departments: res.departments, teams: res.teams, domains: res.domains });
+        setOptions({ departments: actRes.departments, teams: actRes.teams, domains: actRes.domains });
       }
     } catch (err) {
       setError(err.message || 'Failed to load activities');
@@ -134,6 +154,17 @@ export default function AllActivities() {
   const total = data?.total || 0;
   const totalPages = Math.ceil(total / 50);
 
+  const timeline = useMemo(() => {
+    const acts      = activities.map(a => ({ ...a, _type: 'activity' }));
+    const pocItems  = pocs.map(p  => ({ ...p, _type: 'poc',  _sortDate: p.start_date  || p.created_at }));
+    const certItems = certs.map(c => ({ ...c, _type: 'cert', _sortDate: c.issue_date  || c.created_at }));
+    return [...acts, ...pocItems, ...certItems].sort((a, b) => {
+      const da = new Date(a._type === 'activity' ? a.activity_date : a._sortDate);
+      const db = new Date(b._type === 'activity' ? b.activity_date : b._sortDate);
+      return db - da;
+    });
+  }, [activities, pocs, certs]);
+
   return (
     <PageWrapper>
       <div className="space-y-6">
@@ -153,7 +184,7 @@ export default function AllActivities() {
             <div>
               <h1 className="text-2xl font-bold tracking-tight">All Activities</h1>
               <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-                {loading ? '…' : `${total.toLocaleString()} activities across all teams`}
+                {loading ? '…' : `${total.toLocaleString()} activit${total !== 1 ? 'ies' : 'y'}${pocs.length > 0 ? ` · ${pocs.length} POC${pocs.length !== 1 ? 's' : ''}` : ''}${certs.length > 0 ? ` · ${certs.length} cert${certs.length !== 1 ? 's' : ''}` : ''} across all teams`}
               </p>
             </div>
           </div>
@@ -226,7 +257,7 @@ export default function AllActivities() {
         {/* Table */}
         {loading ? (
           <div className="space-y-3">{[...Array(8)].map((_, i) => <Skeleton key={i} className="h-14" />)}</div>
-        ) : activities.length === 0 ? (
+        ) : timeline.length === 0 ? (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
             className="py-20 text-center text-slate-400 dark:text-slate-500">
             <p className="text-4xl mb-3">📭</p>
@@ -249,67 +280,157 @@ export default function AllActivities() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {activities.map((a, i) => (
-                    <motion.tr key={a.id}
-                      initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.02 }}
-                      onClick={() => navigate(`/admin/users/${a.user_id}`)}
-                      className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
-                    >
+                  {timeline.map((item, i) => {
+                    const userId = item.user_id;
+                    const userCell = (
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-2.5">
-                          {a.avatar_url ? (
-                            <img src={a.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                          {item.avatar_url ? (
+                            <img src={item.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
                           ) : (
                             <span className="grid h-7 w-7 place-items-center rounded-full bg-brand-600 text-[10px] font-bold text-white shrink-0">
-                              {a.first_name?.[0]}{a.last_name?.[0]}
+                              {item.first_name?.[0]}{item.last_name?.[0]}
                             </span>
                           )}
                           <div className="min-w-0">
                             <p className="font-medium text-slate-900 dark:text-white truncate text-xs">
-                              {a.first_name} {a.last_name}
+                              {item.first_name} {item.last_name}
                             </p>
-                            <p className="text-[11px] text-slate-400 truncate">{a.email}</p>
+                            <p className="text-[11px] text-slate-400 truncate">{item.email}</p>
                           </div>
                         </div>
                       </td>
+                    );
+                    const teamCell = (
                       <td className="px-5 py-3.5 hidden md:table-cell">
-                        <p className="text-xs text-slate-600 dark:text-slate-400">{a.team || '—'}</p>
-                        <p className="text-[11px] text-slate-400 dark:text-slate-500">{a.department || ''}</p>
+                        <p className="text-xs text-slate-600 dark:text-slate-400">{item.team || '—'}</p>
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500">{item.department || ''}</p>
                       </td>
-                      <td className="px-5 py-3.5">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${TYPE_COLORS[a.activity_type] ?? ''}`}>
-                          {TYPE_META[a.activity_type]?.icon} {TYPE_META[a.activity_type]?.label ?? a.activity_type}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 max-w-[220px]">
-                        <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{a.title}</p>
-                        {a.notes && <p className="text-[11px] text-slate-400 truncate mt-0.5">{a.notes}</p>}
-                      </td>
-                      <td className="px-5 py-3.5 hidden lg:table-cell">
-                        <div className="space-y-0.5 text-xs text-slate-500 dark:text-slate-400">
-                          {a.tool_used && (
-                            <p>🔧 {a.tool_used}{a.model_used ? <span className="ml-1 text-slate-400 dark:text-slate-500">· {a.model_used}</span> : null}</p>
+                    );
+
+                    /* ── POC row ── */
+                    if (item._type === 'poc') return (
+                      <motion.tr key={`poc-${item.id}`}
+                        initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.015 }}
+                        onClick={() => navigate(`/admin/users/${userId}`)}
+                        className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors border-l-4 border-l-purple-400"
+                      >
+                        {userCell}
+                        {teamCell}
+                        <td className="px-5 py-3.5">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
+                            🚀 POC
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 max-w-[220px]">
+                          <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{item.poc_name}</p>
+                          {item.category && <p className="text-[11px] text-slate-400 truncate mt-0.5">📂 {item.category}</p>}
+                        </td>
+                        <td className="px-5 py-3.5 hidden lg:table-cell">
+                          {item.tools_stack?.length > 0 && (
+                            <p className="text-xs text-slate-500 dark:text-slate-400">🔧 {item.tools_stack.join(', ')}</p>
                           )}
-                          {a.domain && <p>🏷️ {a.domain}</p>}
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                        {a.status === 'in_progress' && a.eta
-                          ? <span title="Expected completion">ETA: {new Date(a.eta).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
-                          : new Date(a.activity_date).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' })
-                        }
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          a.status === 'completed'
-                            ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
-                            : 'bg-amber-100  dark:bg-amber-900/40  text-amber-700  dark:text-amber-300'
-                        }`}>
-                          {a.status === 'completed' ? 'Done' : 'In Progress'}
-                        </span>
-                      </td>
-                    </motion.tr>
-                  ))}
+                          {item.progress > 0 && (
+                            <p className="text-[11px] text-slate-400 mt-0.5">📊 {item.progress}%</p>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                          {item.start_date ? new Date(item.start_date).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            item.status === 'Completed'
+                              ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                              : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                          }`}>
+                            {item.status || 'In Progress'}
+                          </span>
+                        </td>
+                      </motion.tr>
+                    );
+
+                    /* ── Cert row ── */
+                    if (item._type === 'cert') return (
+                      <motion.tr key={`cert-${item.id}`}
+                        initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.015 }}
+                        onClick={() => navigate(`/admin/users/${userId}`)}
+                        className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors border-l-4 border-l-emerald-400"
+                      >
+                        {userCell}
+                        {teamCell}
+                        <td className="px-5 py-3.5">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
+                            🏆 Cert
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 max-w-[220px]">
+                          <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{item.cert_name}</p>
+                          {item.issuing_org && <p className="text-[11px] text-slate-400 truncate mt-0.5">{item.issuing_org}</p>}
+                        </td>
+                        <td className="px-5 py-3.5 hidden lg:table-cell text-xs text-slate-500 dark:text-slate-400">
+                          {item.credential_id && <p>🔑 {item.credential_id}</p>}
+                        </td>
+                        <td className="px-5 py-3.5 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                          {item.issue_date ? new Date(item.issue_date).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            item.status === 'Approved'
+                              ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                              : item.status === 'Rejected'
+                              ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300'
+                              : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                          }`}>
+                            {item.status || 'Pending'}
+                          </span>
+                        </td>
+                      </motion.tr>
+                    );
+
+                    /* ── Activity row ── */
+                    return (
+                      <motion.tr key={`act-${item.id}`}
+                        initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.015 }}
+                        onClick={() => navigate(`/admin/users/${userId}`)}
+                        className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
+                      >
+                        {userCell}
+                        {teamCell}
+                        <td className="px-5 py-3.5">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${TYPE_COLORS[item.activity_type] ?? ''}`}>
+                            {TYPE_META[item.activity_type]?.icon} {TYPE_META[item.activity_type]?.label ?? item.activity_type}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 max-w-[220px]">
+                          <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{item.title}</p>
+                          {item.notes && <p className="text-[11px] text-slate-400 truncate mt-0.5">{item.notes}</p>}
+                        </td>
+                        <td className="px-5 py-3.5 hidden lg:table-cell">
+                          <div className="space-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+                            {item.tool_used && (
+                              <p>🔧 {item.tool_used}{item.model_used ? <span className="ml-1 text-slate-400 dark:text-slate-500">· {item.model_used}</span> : null}</p>
+                            )}
+                            {item.domain && <p>🏷️ {item.domain}</p>}
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                          {item.status === 'in_progress' && item.eta
+                            ? <span title="Expected completion">ETA: {new Date(item.eta).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                            : new Date(item.activity_date).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' })
+                          }
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            item.status === 'completed'
+                              ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                              : 'bg-amber-100  dark:bg-amber-900/40  text-amber-700  dark:text-amber-300'
+                          }`}>
+                            {item.status === 'completed' ? 'Done' : 'In Progress'}
+                          </span>
+                        </td>
+                      </motion.tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
