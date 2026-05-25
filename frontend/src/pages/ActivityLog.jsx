@@ -290,6 +290,8 @@ export default function ActivityLog() {
   const [form, setForm]           = useState(EMPTY_FORM);
   const [tags, setTags]           = useState([]);
   const [activities, setActivities] = useState([]);
+  const [pocs, setPocs]             = useState([]);
+  const [certs, setCerts]           = useState([]);
   const [loading, setLoading]     = useState(false);
   const [histLoading, setHistLoading] = useState(false);
   const [success, setSuccess]     = useState(false);
@@ -306,8 +308,16 @@ export default function ActivityLog() {
   /* fetch history when switching to history tab */
   const loadActivities = () => {
     setHistLoading(true);
-    api.get('/activities')
-      .then(r => setActivities(r.activities || []))
+    Promise.all([
+      api.get('/activities'),
+      api.get('/users/me/pocs'),
+      api.get('/users/me/certifications'),
+    ])
+      .then(([actRes, pocRes, certRes]) => {
+        setActivities(actRes.activities || []);
+        setPocs(pocRes.pocs || []);
+        setCerts(certRes.certifications || []);
+      })
       .catch(() => {})
       .finally(() => setHistLoading(false));
   };
@@ -319,12 +329,24 @@ export default function ActivityLog() {
   const toolTags   = useMemo(() => tags.filter(t => t.kind === 'tool'),   [tags]);
   const domainTags = useMemo(() => tags.filter(t => t.kind === 'domain'), [tags]);
 
-  /* filtered list */
+  /* filtered activities */
   const filtered = useMemo(() => activities.filter(a => {
     if (filterType   !== 'all' && a.activity_type !== filterType)   return false;
     if (filterStatus !== 'all' && a.status        !== filterStatus) return false;
     return true;
   }), [activities, filterType, filterStatus]);
+
+  /* unified timeline: filtered activities + all pocs + all certs, sorted newest first */
+  const timeline = useMemo(() => {
+    const acts     = filtered.map(a => ({ ...a, _type: 'activity' }));
+    const pocItems = pocs.map(p  => ({ ...p, _type: 'poc',  _sortDate: p.start_date  || p.created_at }));
+    const certItems = certs.map(c => ({ ...c, _type: 'cert', _sortDate: c.issue_date || c.created_at }));
+    return [...acts, ...pocItems, ...certItems].sort((a, b) => {
+      const da = new Date(a._type === 'activity' ? a.activity_date : a._sortDate);
+      const db = new Date(b._type === 'activity' ? b.activity_date : b._sortDate);
+      return db - da;
+    });
+  }, [filtered, pocs, certs]);
 
   /* form handlers */
   const onChange = e => {
@@ -609,7 +631,7 @@ export default function ActivityLog() {
                   {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
                 <span className="flex items-center text-xs text-slate-400 dark:text-slate-500 ml-1">
-                  {filtered.length} result{filtered.length !== 1 ? 's' : ''}
+                  {filtered.length} activit{filtered.length !== 1 ? 'ies' : 'y'}{pocs.length + certs.length > 0 ? ` · ${pocs.length} POC${pocs.length !== 1 ? 's' : ''} · ${certs.length} cert${certs.length !== 1 ? 's' : ''}` : ''}
                 </span>
               </div>
 
@@ -620,7 +642,7 @@ export default function ActivityLog() {
                     <div key={i} className="h-24 rounded-2xl bg-slate-100 dark:bg-slate-800 animate-pulse" />
                   ))}
                 </div>
-              ) : filtered.length === 0 ? (
+              ) : timeline.length === 0 ? (
                 <motion.div
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                   className="py-16 flex flex-col items-center gap-2 text-slate-400 dark:text-slate-500"
@@ -636,11 +658,81 @@ export default function ActivityLog() {
                   className="space-y-3"
                 >
                   <AnimatePresence>
-                    {filtered.map(activity => {
-                      const meta = TYPE_MAP[activity.activity_type];
+                    {timeline.map(item => {
+                      /* ── POC row ── */
+                      if (item._type === 'poc') return (
+                        <motion.li
+                          key={`poc-${item.id}`}
+                          variants={itemVariants}
+                          layout
+                          className="bg-white dark:bg-slate-900 rounded-2xl border border-l-4 border-slate-200 dark:border-slate-800 border-l-purple-400 p-5 shadow-soft"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-3 min-w-0">
+                              <span className="text-2xl mt-0.5 shrink-0">🚀</span>
+                              <div className="min-w-0">
+                                <p className="font-semibold text-slate-900 dark:text-white truncate">{item.poc_name}</p>
+                                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                                  {item.start_date ? new Date(item.start_date).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' }) : 'No start date'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">POC</span>
+                              <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                item.status === 'Completed'
+                                  ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                                  : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                              }`}>{item.status || 'In Progress'}</span>
+                            </div>
+                          </div>
+                          {(item.category || (item.tools_stack?.length > 0)) && (
+                            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                              {item.category && <span>📂 <span className="font-medium text-slate-700 dark:text-slate-300">{item.category}</span></span>}
+                              {item.tools_stack?.length > 0 && <span>🔧 <span className="font-medium text-slate-700 dark:text-slate-300">{item.tools_stack.join(', ')}</span></span>}
+                              {item.progress > 0 && <span>📊 <span className="font-medium text-slate-700 dark:text-slate-300">{item.progress}% complete</span></span>}
+                            </div>
+                          )}
+                        </motion.li>
+                      );
+
+                      /* ── Cert row ── */
+                      if (item._type === 'cert') return (
+                        <motion.li
+                          key={`cert-${item.id}`}
+                          variants={itemVariants}
+                          layout
+                          className="bg-white dark:bg-slate-900 rounded-2xl border border-l-4 border-slate-200 dark:border-slate-800 border-l-emerald-400 p-5 shadow-soft"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-3 min-w-0">
+                              <span className="text-2xl mt-0.5 shrink-0">🏆</span>
+                              <div className="min-w-0">
+                                <p className="font-semibold text-slate-900 dark:text-white truncate">{item.cert_name}</p>
+                                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                                  {item.issuing_org}{item.issue_date ? ` · ${new Date(item.issue_date).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' })}` : ''}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">Cert</span>
+                              <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                item.status === 'Approved'
+                                  ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                                  : item.status === 'Rejected'
+                                  ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300'
+                                  : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                              }`}>{item.status || 'Pending'}</span>
+                            </div>
+                          </div>
+                        </motion.li>
+                      );
+
+                      /* ── Activity row (unchanged) ── */
+                      const meta = TYPE_MAP[item.activity_type];
                       return (
                         <motion.li
-                          key={activity.id}
+                          key={item.id}
                           variants={itemVariants}
                           exit={itemVariants.exit}
                           layout
@@ -651,38 +743,36 @@ export default function ActivityLog() {
                               <span className="text-2xl mt-0.5 shrink-0">{meta?.icon ?? '📌'}</span>
                               <div className="min-w-0">
                                 <p className="font-semibold text-slate-900 dark:text-white truncate">
-                                  {activity.title}
+                                  {item.title}
                                 </p>
                                 <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                                  {activity.status === 'in_progress' && activity.eta
-                                    ? `ETA: ${new Date(activity.eta).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' })}`
-                                    : new Date(activity.activity_date).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' })
+                                  {item.status === 'in_progress' && item.eta
+                                    ? `ETA: ${new Date(item.eta).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' })}`
+                                    : new Date(item.activity_date).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' })
                                   }
                                 </p>
                               </div>
                             </div>
-
-                            {/* Badges + delete */}
                             <div className="flex items-center gap-2 shrink-0">
                               <span className={`hidden sm:inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${meta?.color ?? ''}`}>
                                 {meta?.label}
                               </span>
                               <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                                activity.status === 'completed'
+                                item.status === 'completed'
                                   ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
                                   : 'bg-amber-100  dark:bg-amber-900/40  text-amber-700  dark:text-amber-300'
                               }`}>
-                                {activity.status === 'completed' ? 'Done' : 'In Progress'}
+                                {item.status === 'completed' ? 'Done' : 'In Progress'}
                               </span>
                               <motion.button
                                 whileTap={{ scale: 0.9 }}
-                                onClick={() => onDelete(activity.id)}
-                                disabled={deletingId === activity.id}
+                                onClick={() => onDelete(item.id)}
+                                disabled={deletingId === item.id}
                                 className="p-1.5 rounded-lg text-slate-300 dark:text-slate-600 hover:text-rose-500 dark:hover:text-rose-400
                                            hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors disabled:opacity-40"
                                 title="Delete"
                               >
-                                {deletingId === activity.id ? (
+                                {deletingId === item.id ? (
                                   <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
@@ -696,30 +786,26 @@ export default function ActivityLog() {
                               </motion.button>
                             </div>
                           </div>
-
-                          {/* Tool / model / domain / notes */}
-                          {(activity.tool_used || activity.domain || activity.notes) && (
+                          {(item.tool_used || item.domain || item.notes) && (
                             <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
                               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-                                {activity.tool_used && (
+                                {item.tool_used && (
                                   <span>🔧 <span className="font-medium text-slate-700 dark:text-slate-300">
-                                    {activity.tool_used}{activity.model_used ? ` · ${activity.model_used}` : ''}
+                                    {item.tool_used}{item.model_used ? ` · ${item.model_used}` : ''}
                                   </span></span>
                                 )}
-                                {activity.domain && (
-                                  <span>🏷️ <span className="font-medium text-slate-700 dark:text-slate-300">{activity.domain}</span></span>
+                                {item.domain && (
+                                  <span>🏷️ <span className="font-medium text-slate-700 dark:text-slate-300">{item.domain}</span></span>
                                 )}
                               </div>
-                              {activity.notes && (
-                                <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">{activity.notes}</p>
+                              {item.notes && (
+                                <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">{item.notes}</p>
                               )}
                             </div>
                           )}
-
-                          {/* Comment thread */}
                           <ActivityCommentThread
-                            activityId={activity.id}
-                            initialCount={activity.comment_count || 0}
+                            activityId={item.id}
+                            initialCount={item.comment_count || 0}
                             currentUserId={currentUser?.id}
                           />
                         </motion.li>

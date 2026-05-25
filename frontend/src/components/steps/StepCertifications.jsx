@@ -183,14 +183,16 @@ function AddCertForm({ onAdded }) {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className="label">Certificate Name <span className="text-rose-500">*</span></label>
-          <input className="field" value={values.cert_name}
+          <input className={`field ${errors.cert_name ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-500/30' : ''}`}
+                 value={values.cert_name}
                  onChange={e => set('cert_name', e.target.value)}
                  placeholder="AWS Solutions Architect" />
           {errors.cert_name && <p className="field-error">{errors.cert_name}</p>}
         </div>
         <div>
           <label className="label">Issuing Organization <span className="text-rose-500">*</span></label>
-          <input className="field" value={values.issuing_org}
+          <input className={`field ${errors.issuing_org ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-500/30' : ''}`}
+                 value={values.issuing_org}
                  onChange={e => set('issuing_org', e.target.value)}
                  placeholder="Amazon Web Services" />
           {errors.issuing_org && <p className="field-error">{errors.issuing_org}</p>}
@@ -227,7 +229,8 @@ function AddCertForm({ onAdded }) {
         </div>
         <div>
           <label className="label">Credential URL</label>
-          <input type="url" className="field" value={values.credential_url}
+          <input type="url" className={`field ${errors.credential_url ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-500/30' : ''}`}
+                 value={values.credential_url}
                  onChange={e => set('credential_url', e.target.value)}
                  placeholder="https://verify.example.com/…" />
           {errors.credential_url && <p className="field-error">{errors.credential_url}</p>}
