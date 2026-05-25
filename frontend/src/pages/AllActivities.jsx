@@ -95,11 +95,15 @@ export default function AllActivities() {
       if (f.from) certParams.set('from', f.from);
       if (f.to)   certParams.set('to',   f.to);
 
-      const [actRes, pocRes, certRes] = await Promise.all([
+      const [actSettled, pocSettled, certSettled] = await Promise.allSettled([
         api.get(`/admin/activities?${params}`),
         api.get(`/admin/pocs?${pocParams}`),
         api.get(`/admin/reviews?${certParams}`),
       ]);
+      if (actSettled.status === 'rejected') throw actSettled.reason;
+      const actRes  = actSettled.value;
+      const pocRes  = pocSettled.status  === 'fulfilled' ? pocSettled.value  : {};
+      const certRes = certSettled.status === 'fulfilled' ? certSettled.value : {};
       setData(actRes);
       setPocs(pocRes.pocs || []);
       setCerts(certRes.certifications || []);

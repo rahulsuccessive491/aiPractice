@@ -283,6 +283,120 @@ function Skeleton({ className = '' }) {
   return <div className={`rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse ${className}`} />;
 }
 
+function PocDetailPanel({ poc, onClose }) {
+  if (!poc) return null;
+  return (
+    <AnimatePresence>
+      {poc && (
+        <>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 0.4 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black z-40" onClick={onClose} />
+          <motion.div
+            initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white dark:bg-slate-900 shadow-2xl flex flex-col overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🚀</span>
+                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">POC</span>
+              </div>
+              <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">✕</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white">{poc.poc_name}</h2>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${poc.status === 'Completed' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'}`}>{poc.status}</span>
+                  {poc.category && <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">📂 {poc.category}</span>}
+                </div>
+              </div>
+              {poc.progress > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Progress</p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                      <div className={`h-full rounded-full ${poc.progress >= 80 ? 'bg-emerald-500' : poc.progress >= 40 ? 'bg-brand-500' : 'bg-amber-500'}`} style={{ width: `${poc.progress}%` }} />
+                    </div>
+                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{poc.progress}%</span>
+                  </div>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                {poc.start_date && <div><p className="text-xs text-slate-400 mb-0.5">Start Date</p><p className="text-sm font-medium text-slate-700 dark:text-slate-300">{new Date(poc.start_date).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })}</p></div>}
+                {poc.end_date   && <div><p className="text-xs text-slate-400 mb-0.5">End Date</p>  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{new Date(poc.end_date).toLocaleDateString('en',   { month: 'short', day: 'numeric', year: 'numeric' })}</p></div>}
+              </div>
+              {poc.tools_stack?.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Tools & Stack</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {poc.tools_stack.map(t => <span key={t} className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-600 dark:text-slate-400">{t}</span>)}
+                  </div>
+                </div>
+              )}
+              {poc.problem_statement && <div><p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Problem Statement</p><p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{poc.problem_statement}</p></div>}
+              {poc.expected_outcome  && <div><p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Expected Outcome</p> <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{poc.expected_outcome}</p></div>}
+              {poc.business_impact   && <div><p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Business Impact</p>  <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{poc.business_impact}</p></div>}
+              {poc.repo_link && <div><p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Repository</p><a href={poc.repo_link} target="_blank" rel="noopener noreferrer" className="text-sm text-brand-600 dark:text-brand-400 hover:underline break-all">{poc.repo_link}</a></div>}
+              {poc.team_members?.length > 0 && <div><p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Team Members</p><p className="text-sm text-slate-700 dark:text-slate-300">{poc.team_members.join(', ')}</p></div>}
+              {poc.remarks && <div><p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Remarks</p><p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{poc.remarks}</p></div>}
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function CertDetailPanel({ cert, onClose }) {
+  if (!cert) return null;
+  return (
+    <AnimatePresence>
+      {cert && (
+        <>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 0.4 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black z-40" onClick={onClose} />
+          <motion.div
+            initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white dark:bg-slate-900 shadow-2xl flex flex-col overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🏆</span>
+                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">Certificate</span>
+              </div>
+              <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">✕</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white">{cert.cert_name}</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{cert.issuing_org}</p>
+                <div className="mt-2">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${cert.status === 'Approved' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' : cert.status === 'Rejected' ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'}`}>{cert.status}</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                {cert.issue_date  && <div><p className="text-xs text-slate-400 mb-0.5">Issue Date</p><p className="text-sm font-medium text-slate-700 dark:text-slate-300">{new Date(cert.issue_date).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })}</p></div>}
+                {cert.no_expiry   && <div><p className="text-xs text-slate-400 mb-0.5">Expires</p><p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">No Expiry</p></div>}
+                {cert.expiry_date && !cert.no_expiry && <div><p className="text-xs text-slate-400 mb-0.5">Expires</p><p className="text-sm font-medium text-slate-700 dark:text-slate-300">{new Date(cert.expiry_date).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })}</p></div>}
+              </div>
+              {cert.credential_id && <div><p className="text-xs text-slate-400 mb-0.5">Credential ID</p><p className="text-sm font-mono text-slate-700 dark:text-slate-300">{cert.credential_id}</p></div>}
+              {cert.credential_url && (
+                <a href={cert.credential_url} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-3 text-sm font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors">
+                  🔗 Verify Credential
+                </a>
+              )}
+              {cert.reviewer_comment && <div><p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Reviewer Comment</p><p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{cert.reviewer_comment}</p></div>}
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
 function ActivityDetailPanel({ activity, currentUser, onClose }) {
   const TYPE_LABELS = {
     learning: 'Learning', practice_project: 'Practice Project',
@@ -405,6 +519,8 @@ export default function UserDetail() {
   const [roleSaving, setRoleSaving]   = useState(false);
   const [roleSaved, setRoleSaved]     = useState(false);
   const [selectedActivity, setSelectedActivity] = useState(null);
+  const [selectedPoc, setSelectedPoc]           = useState(null);
+  const [selectedCert, setSelectedCert]         = useState(null);
 
   async function saveRole() {
     setRoleSaving(true);
@@ -702,8 +818,9 @@ export default function UserDetail() {
                   return (
                     <motion.div key={`poc-${item.id}`}
                       initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.16 + i * 0.03 }}
+                      onClick={() => setSelectedPoc(item)}
                       className="py-3 px-3 rounded-xl border-b border-slate-50 dark:border-slate-800 last:border-b-0
-                                 border-l-4 border-l-purple-400"
+                                 border-l-4 border-l-purple-400 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
@@ -745,8 +862,9 @@ export default function UserDetail() {
                   return (
                     <motion.div key={`cert-${item.id}`}
                       initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.16 + i * 0.03 }}
+                      onClick={() => setSelectedCert(item)}
                       className="py-3 px-3 rounded-xl border-b border-slate-50 dark:border-slate-800 last:border-b-0
-                                 border-l-4 border-l-emerald-400"
+                                 border-l-4 border-l-emerald-400 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
@@ -796,6 +914,8 @@ export default function UserDetail() {
         currentUser={currentUser}
         onClose={() => setSelectedActivity(null)}
       />
+      <PocDetailPanel  poc={selectedPoc}   onClose={() => setSelectedPoc(null)} />
+      <CertDetailPanel cert={selectedCert} onClose={() => setSelectedCert(null)} />
 
     </PageWrapper>
   );
