@@ -115,7 +115,9 @@ router.post('/:id/comments', requireAuth, upload.array('attachments', 5), wrap(a
     );
   }
 
-  const commenterName = `${req.user.first_name} ${req.user.last_name}`;
+  const commenterRow = await db.get('SELECT first_name, last_name, avatar_url FROM users WHERE id = ?', [req.user.id]);
+  if (!commenterRow) return res.status(404).json({ error: 'Commenter not found' });
+  const commenterName = `${commenterRow.first_name} ${commenterRow.last_name}`;
   if (isOwner && !isManager) {
     const owner = await db.get('SELECT reporting_manager_id FROM users WHERE id = ?', [req.user.id]);
     const notified = new Set();
@@ -151,9 +153,9 @@ router.post('/:id/comments', requireAuth, upload.array('attachments', 5), wrap(a
     created_at: new Date().toISOString(),
     commenter: {
       id:         req.user.id,
-      first_name: req.user.first_name,
-      last_name:  req.user.last_name,
-      avatar_url: req.user.avatar_url,
+      first_name: commenterRow.first_name,
+      last_name:  commenterRow.last_name,
+      avatar_url: commenterRow.avatar_url,
       role:       req.user.role,
     },
     attachments: await attachmentsForComment(commentId),

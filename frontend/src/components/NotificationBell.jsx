@@ -172,8 +172,8 @@ function NotifItem({ notif, isReviewer, currentUser, onRead, onReviewDone, onNav
   function handleClick() {
     if (!notif.read) onRead(notif.id);
     if (notif.type === 'activity_commented') {
-      const isManager = ['lead', 'manager', 'admin'].includes(currentUser?.role);
-      onNavigate(isManager ? `/admin/users/${notif.actor_id}` : '/activities');
+      const canAccessAdmin = ['manager', 'admin'].includes(currentUser?.role);
+      onNavigate(canAccessAdmin ? `/admin/users/${notif.actor_id}` : '/dashboard');
     }
   }
 

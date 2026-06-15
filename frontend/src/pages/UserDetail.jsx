@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
@@ -473,9 +473,13 @@ function ActivityDetailPanel({ activity, currentUser, onClose }) {
                 {activity.tool_used && (
                   <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 px-3 py-2.5">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-0.5">Tool</p>
-                    <p className="text-slate-700 dark:text-slate-300 font-medium">
-                      {activity.tool_used}{activity.model_used ? ` · ${activity.model_used}` : ''}
-                    </p>
+                    <p className="text-slate-700 dark:text-slate-300 font-medium">🔧 {activity.tool_used}</p>
+                  </div>
+                )}
+                {activity.model_used && (
+                  <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-0.5">Model</p>
+                    <p className="text-slate-700 dark:text-slate-300 font-medium">🧠 {activity.model_used}</p>
                   </div>
                 )}
                 {activity.domain && (
@@ -521,6 +525,36 @@ export default function UserDetail() {
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [selectedPoc, setSelectedPoc]           = useState(null);
   const [selectedCert, setSelectedCert]         = useState(null);
+  const [actionLoading, setActionLoading]       = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const navigate = useNavigate();
+
+  async function handleSuspend() {
+    if (!data?.user) return;
+    const newStatus = data.user.status === 'suspended' ? 'active' : 'suspended';
+    setActionLoading(true);
+    try {
+      await api.patch(`/admin/users/${userId}/status`, { status: newStatus });
+      setData(d => ({ ...d, user: { ...d.user, status: newStatus } }));
+    } catch (err) {
+      setError(err.message || 'Action failed');
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleDelete() {
+    setActionLoading(true);
+    try {
+      await api.del(`/admin/users/${userId}`);
+      navigate('/admin');
+    } catch (err) {
+      setError(err.message || 'Delete failed');
+      setShowDeleteConfirm(false);
+    } finally {
+      setActionLoading(false);
+    }
+  }
 
   async function saveRole() {
     setRoleSaving(true);
@@ -575,7 +609,7 @@ export default function UserDetail() {
         <div className="py-20 text-center">
           <p className="text-4xl mb-3">😕</p>
           <p className="text-sm text-slate-500 dark:text-slate-400">{error || 'User not found'}</p>
-          <Link to="/admin" className="mt-4 inline-block text-sm text-brand-600 hover:underline">← Back to Dashboard</Link>
+          <Link to={['manager', 'admin'].includes(currentUser?.role) ? '/admin' : '/dashboard'} className="mt-4 inline-block text-sm text-brand-600 hover:underline">← Back to Dashboard</Link>
         </div>
       </PageWrapper>
     );
@@ -592,12 +626,13 @@ export default function UserDetail() {
   const initials = `${user.first_name?.[0] ?? ''}${user.last_name?.[0] ?? ''}`.toUpperCase();
 
   return (
+    <>
     <PageWrapper>
       <div className="max-w-3xl mx-auto space-y-5">
 
         {/* Back */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-          <Link to="/admin"
+          <Link to={['manager', 'admin'].includes(currentUser?.role) ? '/admin' : '/dashboard'}
             className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700
                        dark:hover:text-slate-200 transition-colors">
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
@@ -719,6 +754,35 @@ export default function UserDetail() {
             <p className="mt-4 text-sm text-slate-600 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800 pt-4">
               {user.bio}
             </p>
+          )}
+
+          {/* Admin actions: suspend / delete */}
+          {currentUser?.role === 'admin' && user.role !== 'admin' && (
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 dark:border-slate-800 pt-4">
+              {user.status === 'suspended' ? (
+                <span className="mr-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300">
+                  ⏸ Suspended
+                </span>
+              ) : null}
+              <button
+                onClick={handleSuspend}
+                disabled={actionLoading}
+                className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50
+                  ${user.status === 'suspended'
+                    ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                    : 'border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/20'
+                  }`}
+              >
+                {user.status === 'suspended' ? '▶ Unsuspend' : '⏸ Suspend'}
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={actionLoading}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-rose-300 dark:border-rose-700 px-4 py-2 text-sm font-semibold text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors disabled:opacity-50"
+              >
+                🗑 Delete User
+              </button>
+            </div>
           )}
         </motion.div>
 
@@ -907,16 +971,61 @@ export default function UserDetail() {
         )}
 
       </div>
-
-      {/* Activity detail slide-over */}
-      <ActivityDetailPanel
-        activity={selectedActivity}
-        currentUser={currentUser}
-        onClose={() => setSelectedActivity(null)}
-      />
-      <PocDetailPanel  poc={selectedPoc}   onClose={() => setSelectedPoc(null)} />
-      <CertDetailPanel cert={selectedCert} onClose={() => setSelectedCert(null)} />
-
     </PageWrapper>
+
+    {/* Delete confirmation modal — outside PageWrapper so fixed positioning is viewport-relative */}
+    <AnimatePresence>
+      {showDeleteConfirm && (
+        <>
+          <motion.div
+            key="del-backdrop"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowDeleteConfirm(false)}
+          />
+          <motion.div
+            key="del-modal"
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 12 }}
+            transition={{ duration: 0.2 }}
+            className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2
+                       bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6"
+          >
+            <p className="text-2xl mb-3">⚠️</p>
+            <h2 className="text-base font-bold text-slate-900 dark:text-white mb-2">Delete {user.first_name} {user.last_name}?</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-5">
+              This will permanently delete the user and all their data (activities, skills, POCs, certifications). This cannot be undone.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={actionLoading}
+                className="flex-1 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 px-4 py-2.5 text-sm font-semibold text-white transition-colors"
+              >
+                {actionLoading ? 'Deleting…' : 'Yes, Delete'}
+              </button>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+
+    {/* Slide-over panels — outside PageWrapper so fixed positioning is viewport-relative */}
+    <ActivityDetailPanel
+      activity={selectedActivity}
+      currentUser={currentUser}
+      onClose={() => setSelectedActivity(null)}
+    />
+    <PocDetailPanel  poc={selectedPoc}   onClose={() => setSelectedPoc(null)} />
+    <CertDetailPanel cert={selectedCert} onClose={() => setSelectedCert(null)} />
+
+  </>
   );
 }
