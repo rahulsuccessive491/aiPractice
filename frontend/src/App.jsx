@@ -9,7 +9,9 @@ import ActivityLog from './pages/ActivityLog.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 import AllActivities from './pages/AllActivities.jsx';
 import UserDetail from './pages/UserDetail.jsx';
+import TeamDetail from './pages/TeamDetail.jsx';
 import ProfileSetup from './pages/ProfileSetup.jsx';
+import ActivityDetail from './pages/ActivityDetail.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 
 function HomeRedirect() {
@@ -32,9 +34,11 @@ export default function App() {
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/profile"   element={<Navigate to="/profile-setup" replace />} />
           <Route path="/activities" element={<ProtectedRoute><ActivityLog /></ProtectedRoute>} />
+          <Route path="/activities/:id" element={<ProtectedRoute><ActivityDetail /></ProtectedRoute>} />
           <Route path="/admin"                element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/activities"     element={<ProtectedRoute><AllActivities /></ProtectedRoute>} />
           <Route path="/admin/users/:userId"  element={<ProtectedRoute><UserDetail /></ProtectedRoute>} />
+          <Route path="/admin/teams/:teamId"  element={<ProtectedRoute><TeamDetail /></ProtectedRoute>} />
           <Route path="/profile-setup" element={<ProtectedRoute><ProfileSetup /></ProtectedRoute>} />
           <Route path="*" element={
             <div className="grid place-items-center py-20 text-center">

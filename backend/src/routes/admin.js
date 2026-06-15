@@ -509,6 +509,73 @@ router.post('/users', requireRole('admin'), wrap(async (req, res) => {
   res.status(201).json({ user: newUser });
 }));
 
+// ---------- GET /api/admin/teams/:teamId ----------
+router.get('/teams/:teamId', wrap(async (req, res) => {
+  const team = await db.get('SELECT id, name, description, created_at FROM teams WHERE id = ?', [req.params.teamId]);
+  if (!team) return res.status(404).json({ error: 'Team not found' });
+
+  const members = await db.all(`
+    SELECT u.id, u.first_name, u.last_name, u.email, u.role, u.designation, u.department,
+           u.avatar_url, u.profile_completed, u.status,
+           COUNT(a.id) as activity_count,
+           (SELECT COUNT(*) FROM user_skills   WHERE user_id = u.id) AS skills_count,
+           (SELECT COUNT(*) FROM user_pocs     WHERE user_id = u.id) AS pocs_count,
+           (SELECT COUNT(*) FROM user_certifications WHERE user_id = u.id AND status = 'Approved') AS approved_certs
+    FROM users u
+    LEFT JOIN activities a ON a.user_id = u.id
+    WHERE u.team_id = ?
+    GROUP BY u.id
+    ORDER BY activity_count DESC
+  `, [req.params.teamId]);
+
+  const stats = await db.get(`
+    SELECT COUNT(DISTINCT u.id) as total_members,
+           COUNT(DISTINCT CASE WHEN a.id IS NOT NULL THEN u.id END) as members_with_activities,
+           COUNT(a.id) as activity_count
+    FROM users u
+    LEFT JOIN activities a ON a.user_id = u.id
+    WHERE u.team_id = ?
+  `, [req.params.teamId]);
+
+  const adoptionRate = stats.total_members > 0
+    ? Math.round((stats.members_with_activities / stats.total_members) * 100)
+    : 0;
+
+  res.json({
+    team: { ...team, ...stats, adoptionRate },
+    members: members.map(m => ({ ...m, profile_completed: m.profile_completed === 1 })),
+  });
+}));
+
+// ---------- PATCH /api/admin/users/:userId/status ----------
+router.patch('/users/:userId/status', requireRole('admin'), wrap(async (req, res) => {
+  const { status } = req.body;
+  if (!['active', 'suspended'].includes(status)) {
+    return res.status(400).json({ error: 'status must be active or suspended' });
+  }
+  const target = await db.get('SELECT id, email, role, status FROM users WHERE id = ?', [req.params.userId]);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (target.role === 'admin') {
+    return res.status(403).json({ error: 'Cannot suspend an admin account' });
+  }
+  await db.run("UPDATE users SET status = ?, updated_at = datetime('now') WHERE id = ?", [status, req.params.userId]);
+  res.json({ id: target.id, email: target.email, status });
+}));
+
+// ---------- DELETE /api/admin/users/:userId ----------
+router.delete('/users/:userId', requireRole('admin'), wrap(async (req, res) => {
+  const target = await db.get('SELECT id, email, role FROM users WHERE id = ?', [req.params.userId]);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (target.role === 'admin') {
+    return res.status(403).json({ error: 'Cannot delete an admin account' });
+  }
+  if (String(target.id) === String(req.user.id)) {
+    return res.status(403).json({ error: 'Cannot delete your own account' });
+  }
+  await db.run('DELETE FROM users WHERE id = ?', [req.params.userId]);
+  res.json({ deleted: true, id: target.id });
+}));
+
 // ---------- PATCH /api/admin/users/:userId/role ----------
 router.patch('/users/:userId/role', requireRole('admin'), wrap(async (req, res) => {
   const { role } = req.body;

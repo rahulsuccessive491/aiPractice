@@ -1,16 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis,
-  CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList,
-} from 'recharts';
+import HighchartsReact from 'highcharts-react-official';
+import Highcharts from '../lib/highchartsInit.js';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { api } from '../lib/api';
 import PageWrapper from '../components/PageWrapper';
 import AnimatedNumber from '../components/AnimatedNumber';
-import ChartTooltip from '../components/ChartTooltip';
 
 /* ── palette ─────────────────────────────────────────────────── */
 const PALETTE = ['#3a60f5', '#8b5cf6', '#10b981', '#f59e0b', '#f43f5e', '#06b6d4', '#f97316', '#6366f1'];
@@ -136,8 +133,11 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const isDark = theme === 'dark';
 
-  const gridColor = isDark ? '#334155' : '#e2e8f0';
-  const tickColor = isDark ? '#94a3b8' : '#64748b';
+  const gridColor    = isDark ? '#334155' : '#e2e8f0';
+  const tickColor    = isDark ? '#94a3b8' : '#64748b';
+  const tooltipBg    = isDark ? '#1e293b' : '#ffffff';
+  const tooltipBorder = isDark ? '#334155' : '#e2e8f0';
+  const tooltipText  = isDark ? '#e2e8f0' : '#1e293b';
 
   const [tab, setTab]           = useState('overview');
   const [loading, setLoading]   = useState(false);
@@ -490,113 +490,173 @@ export default function AdminDashboard() {
               {/* Chart grid */}
               <div className="mt-6 grid gap-6 lg:grid-cols-2">
 
-                {/* BarChart — Activities by Type */}
+                {/* Column — Activities by Type */}
                 <ChartCard title="Activities by Type" delay={0.2}>
                   {loading ? <Skeleton className="h-56" /> : chartData.byType.length === 0 ? <EmptyChart /> : (
-                    <ResponsiveContainer width="100%" height={220}>
-                      <BarChart data={chartData.byType} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
-                        <XAxis dataKey="label" tick={{ fontSize: 10, fill: tickColor }}
-                               tickFormatter={v => v.replace(/_/g, ' ')}
-                               axisLine={false} tickLine={false} />
-                        <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: tickColor }}
-                               axisLine={false} tickLine={false} />
-                        <Tooltip content={<ChartTooltip />} />
-                        <Bar dataKey="count" name="Activities" radius={[6, 6, 0, 0]} maxBarSize={48}
-                             animationDuration={900}>
-                          {chartData.byType.map((_, i) => (
-                            <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
-                          ))}
-                          <LabelList dataKey="count" position="top"
-                            style={{ fontSize: 10, fontWeight: 600, fill: tickColor }} />
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <HighchartsReact highcharts={Highcharts} options={{
+                      chart: { type: 'column', height: 220, backgroundColor: 'transparent', animation: { duration: 700 } },
+                      title: { text: '' }, credits: { enabled: false }, exporting: { enabled: false },
+                      xAxis: {
+                        categories: chartData.byType.map(d => d.label.replace(/_/g, ' ')),
+                        crosshair: { color: isDark ? '#475569' : '#cbd5e1', width: 1 },
+                        labels: { style: { color: tickColor, fontSize: '10px' } },
+                        lineColor: gridColor, tickColor: 'transparent',
+                      },
+                      yAxis: {
+                        allowDecimals: false,
+                        gridLineColor: gridColor,
+                        labels: { style: { color: tickColor, fontSize: '10px' } },
+                        title: { text: '' },
+                      },
+                      plotOptions: {
+                        column: {
+                          borderRadius: 6, maxPointWidth: 48,
+                          dataLabels: { enabled: true, format: '{point.y}', style: { fontSize: '10px', fontWeight: '600', color: tickColor, textOutline: 'none' } },
+                        },
+                      },
+                      tooltip: {
+                        backgroundColor: tooltipBg, borderColor: tooltipBorder, borderRadius: 10,
+                        style: { color: tooltipText, fontSize: '12px' }, shadow: false,
+                        pointFormat: '<span style="color:{point.color}">●</span> Activities: <b>{point.y}</b>',
+                      },
+                      series: [{
+                        name: 'Activities',
+                        data: chartData.byType.map((d, i) => ({ y: d.count, color: PALETTE[i % PALETTE.length] })),
+                      }],
+                      legend: { enabled: false },
+                    }} />
                   )}
                 </ChartCard>
 
-                {/* PieChart — Activities by Domain */}
+                {/* Donut — Activities by Domain */}
                 <ChartCard title="Activities by Domain" delay={0.28}>
                   {loading ? <Skeleton className="h-56" /> : chartData.byDomain.length === 0 ? <EmptyChart /> : (
-                    <ResponsiveContainer width="100%" height={220}>
-                      <PieChart>
-                        <Pie data={chartData.byDomain} cx="50%" cy="50%"
-                             innerRadius={55} outerRadius={85}
-                             dataKey="count" nameKey="label"
-                             paddingAngle={3} strokeWidth={0}
-                             animationBegin={0} animationDuration={900}>
-                          {chartData.byDomain.map((_, i) => (
-                            <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip content={<ChartTooltip />} />
-                        <Legend iconType="circle" iconSize={8}
-                                wrapperStyle={{ fontSize: 11, color: tickColor }} />
-                      </PieChart>
-                    </ResponsiveContainer>
+                    <HighchartsReact highcharts={Highcharts} options={{
+                      chart: { type: 'pie', height: 220, backgroundColor: 'transparent', animation: { duration: 700 } },
+                      title: { text: '' }, credits: { enabled: false }, exporting: { enabled: false },
+                      plotOptions: {
+                        pie: {
+                          innerSize: '52%', dataLabels: { enabled: false }, showInLegend: true,
+                          allowPointSelect: true, cursor: 'pointer', slicedOffset: 10,
+                        },
+                      },
+                      legend: {
+                        align: 'center', verticalAlign: 'bottom', symbolRadius: 4,
+                        itemStyle: { color: tickColor, fontSize: '11px', fontWeight: '400' },
+                        itemHoverStyle: { color: isDark ? '#e2e8f0' : '#1e293b' },
+                      },
+                      tooltip: {
+                        backgroundColor: tooltipBg, borderColor: tooltipBorder, borderRadius: 10,
+                        style: { color: tooltipText, fontSize: '12px' }, shadow: false,
+                        pointFormat: '<span style="color:{point.color}">●</span> <b>{point.name}</b><br/>Count: <b>{point.y}</b> · <b>{point.percentage:.1f}%</b>',
+                      },
+                      series: [{
+                        name: 'Activities',
+                        data: chartData.byDomain.map((d, i) => ({ name: d.label, y: d.count, color: PALETTE[i % PALETTE.length] })),
+                      }],
+                    }} />
                   )}
                 </ChartCard>
 
-                {/* Horizontal BarChart — Activities by Team */}
+                {/* Bar — Activities by Team */}
                 <ChartCard title="Activities by Team" delay={0.36}>
                   {loading ? <Skeleton className="h-56" /> : chartData.byTeam.length === 0 ? <EmptyChart /> : (
-                    <ResponsiveContainer width="100%" height={220}>
-                      <BarChart data={chartData.byTeam} layout="vertical"
-                                margin={{ top: 4, right: 24, left: 8, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={gridColor} horizontal={false} />
-                        <XAxis type="number" allowDecimals={false}
-                               tick={{ fontSize: 10, fill: tickColor }} axisLine={false} tickLine={false} />
-                        <YAxis dataKey="label" type="category" width={68}
-                               tick={{ fontSize: 10, fill: tickColor }} axisLine={false} tickLine={false} />
-                        <Tooltip content={<ChartTooltip />} />
-                        <Bar dataKey="count" name="Activities"
-                             fill="#8b5cf6" radius={[0, 6, 6, 0]} maxBarSize={20}
-                             animationDuration={900} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <HighchartsReact highcharts={Highcharts} options={{
+                      chart: { type: 'bar', height: 220, backgroundColor: 'transparent', animation: { duration: 700 } },
+                      title: { text: '' }, credits: { enabled: false }, exporting: { enabled: false },
+                      xAxis: {
+                        categories: chartData.byTeam.map(d => d.label), gridLineWidth: 0,
+                        labels: { style: { color: tickColor, fontSize: '10px' } },
+                        lineColor: gridColor, tickColor: 'transparent',
+                      },
+                      yAxis: {
+                        allowDecimals: false, gridLineColor: gridColor,
+                        labels: { style: { color: tickColor, fontSize: '10px' } },
+                        title: { text: '' },
+                      },
+                      plotOptions: {
+                        bar: {
+                          borderRadius: 4, maxPointWidth: 20,
+                          dataLabels: { enabled: true, format: '{point.y}', style: { fontSize: '10px', fontWeight: '600', color: tickColor, textOutline: 'none' } },
+                        },
+                      },
+                      tooltip: {
+                        backgroundColor: tooltipBg, borderColor: tooltipBorder, borderRadius: 10,
+                        style: { color: tooltipText, fontSize: '12px' }, shadow: false,
+                        pointFormat: '<span style="color:{series.color}">●</span> Activities: <b>{point.y}</b>',
+                      },
+                      series: [{ name: 'Activities', color: '#8b5cf6', data: chartData.byTeam.map(d => d.count) }],
+                      legend: { enabled: false },
+                    }} />
                   )}
                 </ChartCard>
 
-                {/* Horizontal BarChart — Adoption % by Team */}
+                {/* Bar — AI Adoption % by Team (color-coded) */}
                 <ChartCard title="AI Adoption % by Team" delay={0.44}>
                   {loading ? <Skeleton className="h-56" /> : chartData.adoptionByTeam.length === 0 ? <EmptyChart /> : (
-                    <ResponsiveContainer width="100%" height={220}>
-                      <BarChart data={chartData.adoptionByTeam} layout="vertical"
-                                margin={{ top: 4, right: 40, left: 8, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={gridColor} horizontal={false} />
-                        <XAxis type="number" domain={[0, 100]}
-                               tickFormatter={v => `${v}%`}
-                               tick={{ fontSize: 10, fill: tickColor }} axisLine={false} tickLine={false} />
-                        <YAxis dataKey="label" type="category" width={68}
-                               tick={{ fontSize: 10, fill: tickColor }} axisLine={false} tickLine={false} />
-                        <Tooltip content={<ChartTooltip formatter={v => `${Math.round(v)}%`} />} />
-                        <Bar dataKey="value" name="Adoption"
-                             fill="#10b981" radius={[0, 6, 6, 0]} maxBarSize={20}
-                             animationDuration={900} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <HighchartsReact highcharts={Highcharts} options={{
+                      chart: { type: 'bar', height: 220, backgroundColor: 'transparent', animation: { duration: 700 } },
+                      title: { text: '' }, credits: { enabled: false }, exporting: { enabled: false },
+                      xAxis: {
+                        categories: chartData.adoptionByTeam.map(d => d.label), gridLineWidth: 0,
+                        labels: { style: { color: tickColor, fontSize: '10px' } },
+                        lineColor: gridColor, tickColor: 'transparent',
+                      },
+                      yAxis: {
+                        max: 100, gridLineColor: gridColor,
+                        labels: { format: '{value}%', style: { color: tickColor, fontSize: '10px' } },
+                        title: { text: '' },
+                      },
+                      plotOptions: {
+                        bar: {
+                          borderRadius: 4, maxPointWidth: 20, colorByPoint: true,
+                          dataLabels: { enabled: true, format: '{point.y:.0f}%', style: { fontSize: '10px', fontWeight: '600', textOutline: 'none' } },
+                        },
+                      },
+                      tooltip: {
+                        backgroundColor: tooltipBg, borderColor: tooltipBorder, borderRadius: 10,
+                        style: { color: tooltipText, fontSize: '12px' }, shadow: false,
+                        pointFormat: '<span style="color:{point.color}">●</span> Adoption: <b>{point.y:.0f}%</b>',
+                      },
+                      series: [{
+                        name: 'Adoption',
+                        data: chartData.adoptionByTeam.map(d => ({
+                          y: d.value,
+                          color: d.value >= 70 ? '#10b981' : d.value >= 40 ? '#f59e0b' : '#f43f5e',
+                        })),
+                      }],
+                      legend: { enabled: false },
+                    }} />
                   )}
                 </ChartCard>
 
-                {/* PieChart — AI Models Used */}
+                {/* Donut — AI Models Used */}
                 <ChartCard title="AI Models Used" delay={0.52}>
                   {loading ? <Skeleton className="h-56" /> : chartData.byModel.length === 0 ? <EmptyChart /> : (
-                    <ResponsiveContainer width="100%" height={220}>
-                      <PieChart>
-                        <Pie data={chartData.byModel} cx="50%" cy="50%"
-                             innerRadius={55} outerRadius={85}
-                             dataKey="count" nameKey="name"
-                             paddingAngle={3} strokeWidth={0}
-                             animationBegin={0} animationDuration={900}>
-                          {chartData.byModel.map((_, i) => (
-                            <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip content={<ChartTooltip />} />
-                        <Legend iconType="circle" iconSize={8}
-                                wrapperStyle={{ fontSize: 11, color: tickColor }} />
-                      </PieChart>
-                    </ResponsiveContainer>
+                    <HighchartsReact highcharts={Highcharts} options={{
+                      chart: { type: 'pie', height: 220, backgroundColor: 'transparent', animation: { duration: 700 } },
+                      title: { text: '' }, credits: { enabled: false }, exporting: { enabled: false },
+                      plotOptions: {
+                        pie: {
+                          innerSize: '52%', dataLabels: { enabled: false }, showInLegend: true,
+                          allowPointSelect: true, cursor: 'pointer', slicedOffset: 10,
+                        },
+                      },
+                      legend: {
+                        align: 'center', verticalAlign: 'bottom', symbolRadius: 4,
+                        itemStyle: { color: tickColor, fontSize: '11px', fontWeight: '400' },
+                        itemHoverStyle: { color: isDark ? '#e2e8f0' : '#1e293b' },
+                      },
+                      tooltip: {
+                        backgroundColor: tooltipBg, borderColor: tooltipBorder, borderRadius: 10,
+                        style: { color: tooltipText, fontSize: '12px' }, shadow: false,
+                        pointFormat: '<span style="color:{point.color}">●</span> <b>{point.name}</b><br/>Uses: <b>{point.y}</b> ({point.percentage:.1f}%)',
+                      },
+                      series: [{
+                        name: 'Uses',
+                        data: chartData.byModel.map((d, i) => ({ name: d.name, y: d.count, color: PALETTE[i % PALETTE.length] })),
+                      }],
+                    }} />
                   )}
                 </ChartCard>
 
@@ -670,7 +730,8 @@ export default function AdminDashboard() {
                             initial={{ opacity: 0, x: -8 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: i * 0.04 }}
-                            className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                            onClick={() => navigate(`/admin/teams/${team.id}`)}
+                            className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
                           >
                             <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">{team.name}</td>
                             <td className="px-6 py-4 text-right text-slate-500 dark:text-slate-400">{team.total_members}</td>
@@ -981,7 +1042,8 @@ export default function AdminDashboard() {
                             initial={{ opacity: 0, x: -6 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: i * 0.025 }}
-                            className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                            onClick={() => navigate(`/admin/users/${u.id}`)}
+                            className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
                           >
                             <td className="px-5 py-3.5">
                               <div className="flex items-center gap-2.5">

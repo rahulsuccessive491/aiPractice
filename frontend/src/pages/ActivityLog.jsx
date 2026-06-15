@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import PageWrapper from '../components/PageWrapper';
@@ -286,6 +287,7 @@ const itemVariants = {
 /* ── component ───────────────────────────────────────────────── */
 export default function ActivityLog() {
   const { user: currentUser } = useAuth();
+  const navigate = useNavigate();
   const [tab, setTab]             = useState('form');
   const [form, setForm]           = useState(EMPTY_FORM);
   const [tags, setTags]           = useState([]);
@@ -728,7 +730,7 @@ export default function ActivityLog() {
                         </motion.li>
                       );
 
-                      /* ── Activity row (unchanged) ── */
+                      /* ── Activity row ── */
                       const meta = TYPE_MAP[item.activity_type];
                       return (
                         <motion.li
@@ -736,7 +738,8 @@ export default function ActivityLog() {
                           variants={itemVariants}
                           exit={itemVariants.exit}
                           layout
-                          className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-soft"
+                          onClick={() => navigate(`/activities/${item.id}`)}
+                          className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-soft cursor-pointer hover:border-brand-300 dark:hover:border-brand-700 transition-colors"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex items-start gap-3 min-w-0">
@@ -766,7 +769,7 @@ export default function ActivityLog() {
                               </span>
                               <motion.button
                                 whileTap={{ scale: 0.9 }}
-                                onClick={() => onDelete(item.id)}
+                                onClick={e => { e.stopPropagation(); onDelete(item.id); }}
                                 disabled={deletingId === item.id}
                                 className="p-1.5 rounded-lg text-slate-300 dark:text-slate-600 hover:text-rose-500 dark:hover:text-rose-400
                                            hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors disabled:opacity-40"
@@ -786,13 +789,14 @@ export default function ActivityLog() {
                               </motion.button>
                             </div>
                           </div>
-                          {(item.tool_used || item.domain || item.notes) && (
+                          {(item.tool_used || item.model_used || item.domain || item.notes) && (
                             <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
                               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                                 {item.tool_used && (
-                                  <span>🔧 <span className="font-medium text-slate-700 dark:text-slate-300">
-                                    {item.tool_used}{item.model_used ? ` · ${item.model_used}` : ''}
-                                  </span></span>
+                                  <span>🔧 <span className="font-medium text-slate-700 dark:text-slate-300">{item.tool_used}</span></span>
+                                )}
+                                {item.model_used && (
+                                  <span>🧠 <span className="font-medium text-slate-700 dark:text-slate-300">{item.model_used}</span></span>
                                 )}
                                 {item.domain && (
                                   <span>🏷️ <span className="font-medium text-slate-700 dark:text-slate-300">{item.domain}</span></span>
@@ -803,11 +807,13 @@ export default function ActivityLog() {
                               )}
                             </div>
                           )}
-                          <ActivityCommentThread
-                            activityId={item.id}
-                            initialCount={item.comment_count || 0}
-                            currentUserId={currentUser?.id}
-                          />
+                          <div onClick={e => e.stopPropagation()}>
+                            <ActivityCommentThread
+                              activityId={item.id}
+                              initialCount={item.comment_count || 0}
+                              currentUserId={currentUser?.id}
+                            />
+                          </div>
                         </motion.li>
                       );
                     })}
