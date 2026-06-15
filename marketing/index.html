@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Practice Dashboard — Successive Technologies</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50:  '#eef4ff',
+              100: '#dbe6ff',
+              200: '#b8ccff',
+              300: '#8aa9ff',
+              400: '#5d83ff',
+              500: '#3a60f5',
+              600: '#2546d8',
+              700: '#1d36ab',
+              800: '#1a2f87',
+              900: '#19296b',
+            },
+            nano: {
+              50:  '#f0fdf9',
+              100: '#ccfbef',
+              200: '#99f6e0',
+              300: '#5eead4',
+              400: '#2dd4bf',
+              500: '#14b8a6',
+              600: '#0d9488',
+              700: '#0f766e',
+              800: '#115e59',
+              900: '#134e4a',
+            },
+          },
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          },
+          animation: {
+            'fade-up':    'fadeUp 0.6s ease forwards',
+            'fade-right': 'fadeRight 0.6s ease forwards',
+            'pulse-slow': 'pulse 3s ease-in-out infinite',
+          },
+          keyframes: {
+            fadeUp:    { '0%': { opacity: '0', transform: 'translateY(20px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+            fadeRight: { '0%': { opacity: '0', transform: 'translateX(-20px)' }, '100%': { opacity: '1', transform: 'translateX(0)' } },
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+
+    .gradient-hero {
+      background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(58,96,245,0.22) 0%, transparent 70%),
+                  radial-gradient(ellipse 50% 40% at 90% 30%, rgba(20,184,166,0.10) 0%, transparent 60%),
+                  #020817;
+    }
+
+    .gradient-card {
+      background: linear-gradient(135deg, rgba(58,96,245,0.08) 0%, rgba(20,184,166,0.05) 100%);
+    }
+
+    .glow-brand {
+      box-shadow: 0 0 40px -8px rgba(58, 96, 245, 0.5);
+    }
+
+    .glow-nano {
+      box-shadow: 0 0 40px -8px rgba(20, 184, 166, 0.4);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    .grid-bg {
+      background-image:
+        linear-gradient(rgba(58,96,245,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(58,96,245,0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    .stat-card:hover { transform: translateY(-3px); }
+    .stat-card { transition: transform 0.2s ease; }
+
+    .feature-card:hover { border-color: rgba(58,96,245,0.4); }
+    .feature-card { transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+    .feature-card:hover { box-shadow: 0 0 0 1px rgba(58,96,245,0.2), 0 8px 32px -8px rgba(0,0,0,0.4); }
+
+    .sprint-dot { position: relative; }
+    .sprint-dot::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 0;
+      transform: translateX(-50%);
+      width: 2px;
+      height: 100%;
+      background: linear-gradient(to bottom, rgba(58,96,245,0.4), rgba(20,184,166,0.2));
+      z-index: 0;
+    }
+
+    .animate-delay-100 { animation-delay: 0.1s; }
+    .animate-delay-200 { animation-delay: 0.2s; }
+    .animate-delay-300 { animation-delay: 0.3s; }
+    .animate-delay-400 { animation-delay: 0.4s; }
+    .animate-delay-500 { animation-delay: 0.5s; }
+
+    .opacity-0-init { opacity: 0; }
+  </style>
+</head>
+<body class="gradient-hero text-slate-100 min-h-screen antialiased">
+
+  <!-- ── NAV ──────────────────────────────────────────────── -->
+  <nav class="fixed top-0 inset-x-0 z-50 border-b border-white/5 bg-[#020817]/80 backdrop-blur-xl">
+    <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-brand-500 flex items-center justify-center glow-brand">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M8 2L14 5.5V10.5L8 14L2 10.5V5.5L8 2Z" fill="white" fill-opacity="0.9"/>
+            <path d="M8 6L10.5 7.5V10.5L8 12L5.5 10.5V7.5L8 6Z" fill="white"/>
+          </svg>
+        </div>
+        <span class="font-bold text-white text-sm tracking-tight">AI Practice</span>
+        <span class="hidden sm:block badge bg-brand-500/10 text-brand-400 border border-brand-500/20">POC v1</span>
+      </div>
+      <div class="flex items-center gap-4">
+        <a href="https://github.com/rahulsuccessive491/aiPractice" target="_blank"
+           class="hidden sm:flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors">
+          <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+          </svg>
+          GitHub
+        </a>
+        <a href="https://ai-practice-phi.vercel.app" target="_blank"
+           class="badge bg-brand-500 text-white hover:bg-brand-600 transition-colors cursor-pointer text-xs font-semibold px-4 py-2 rounded-lg">
+          Launch App →
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── HERO ─────────────────────────────────────────────── -->
+  <section class="grid-bg relative pt-36 pb-24 px-6 overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none">
+      <div class="absolute top-20 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-brand-500/5 blur-3xl"></div>
+      <div class="absolute top-40 right-10 w-[200px] h-[200px] rounded-full bg-nano-500/8 blur-2xl"></div>
+    </div>
+
+    <div class="max-w-4xl mx-auto text-center relative z-10">
+      <div class="inline-flex items-center gap-2 badge bg-nano-500/10 text-nano-400 border border-nano-500/20 mb-6">
+        <span class="w-1.5 h-1.5 rounded-full bg-nano-400 animate-pulse"></span>
+        Built at Successive Technologies · May 2026
+      </div>
+
+      <h1 class="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight text-white leading-[1.05] mb-6">
+        AI Practice
+        <span class="block bg-gradient-to-r from-brand-400 via-brand-300 to-nano-400 bg-clip-text text-transparent">
+          Dashboard
+        </span>
+      </h1>
+
+      <p class="text-lg sm:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed mb-10">
+        An internal intelligence hub tracking AI adoption, learning activities, and certifications across our
+        <span class="text-slate-200 font-medium">engineering orgs of any size</span>.
+        Built as a proof-of-concept with Claude as the primary development assistant.
+      </p>
+
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a href="https://ai-practice-phi.vercel.app" target="_blank"
+           class="group flex items-center gap-3 bg-brand-500 hover:bg-brand-600 text-white font-semibold text-sm px-7 py-3.5 rounded-xl transition-all glow-brand hover:glow-brand">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/>
+          </svg>
+          View Live Dashboard
+          <span class="group-hover:translate-x-0.5 transition-transform">→</span>
+        </a>
+        <a href="https://github.com/rahulsuccessive491/aiPractice" target="_blank"
+           class="flex items-center gap-3 border border-white/10 hover:border-white/20 bg-white/5 hover:bg-white/8 text-slate-300 hover:text-white font-semibold text-sm px-7 py-3.5 rounded-xl transition-all">
+          <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+          </svg>
+          View Source Code
+        </a>
+      </div>
+    </div>
+
+    <!-- Hero visual mockup -->
+    <div class="max-w-5xl mx-auto mt-20 relative">
+      <div class="rounded-2xl border border-white/8 bg-slate-900/60 backdrop-blur overflow-hidden shadow-2xl" style="box-shadow: 0 40px 120px -30px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.05);">
+        <!-- Fake browser bar -->
+        <div class="flex items-center gap-2 px-5 py-3.5 border-b border-white/6 bg-slate-950/60">
+          <div class="flex gap-1.5">
+            <div class="w-3 h-3 rounded-full bg-red-500/60"></div>
+            <div class="w-3 h-3 rounded-full bg-yellow-500/60"></div>
+            <div class="w-3 h-3 rounded-full bg-green-500/60"></div>
+          </div>
+          <div class="flex-1 mx-4 bg-slate-800/60 rounded-md px-3 py-1 text-xs text-slate-500 font-mono">
+            https://ai-practice-phi.vercel.app/dashboard
+          </div>
+        </div>
+        <!-- Fake dashboard content -->
+        <div class="p-6 bg-slate-950/40">
+          <!-- KPI row -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+            <div class="stat-card gradient-card rounded-xl border border-white/6 p-4">
+              <p class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Total Users</p>
+              <p class="text-2xl font-black text-brand-400">247</p>
+            </div>
+            <div class="stat-card gradient-card rounded-xl border border-white/6 p-4">
+              <p class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Activities</p>
+              <p class="text-2xl font-black text-nano-400">1,428</p>
+            </div>
+            <div class="stat-card gradient-card rounded-xl border border-white/6 p-4">
+              <p class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Adoption</p>
+              <p class="text-2xl font-black text-purple-400">74%</p>
+            </div>
+            <div class="stat-card gradient-card rounded-xl border border-white/6 p-4">
+              <p class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Teams</p>
+              <p class="text-2xl font-black text-amber-400">12</p>
+            </div>
+          </div>
+          <!-- Fake chart bars -->
+          <div class="gradient-card rounded-xl border border-white/6 p-4">
+            <p class="text-xs text-slate-500 font-semibold mb-4">Activities by Team</p>
+            <div class="space-y-2.5">
+              <div class="flex items-center gap-3">
+                <span class="text-[10px] text-slate-500 w-20 text-right">Frontend</span>
+                <div class="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div class="h-full bg-gradient-to-r from-brand-500 to-brand-400 rounded-full" style="width:82%"></div>
+                </div>
+                <span class="text-[10px] text-slate-400 w-6">82</span>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="text-[10px] text-slate-500 w-20 text-right">Backend</span>
+                <div class="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div class="h-full bg-gradient-to-r from-nano-500 to-nano-400 rounded-full" style="width:68%"></div>
+                </div>
+                <span class="text-[10px] text-slate-400 w-6">68</span>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="text-[10px] text-slate-500 w-20 text-right">DevOps</span>
+                <div class="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div class="h-full bg-gradient-to-r from-purple-500 to-purple-400 rounded-full" style="width:55%"></div>
+                </div>
+                <span class="text-[10px] text-slate-400 w-6">55</span>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="text-[10px] text-slate-500 w-20 text-right">Mobile</span>
+                <div class="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div class="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full" style="width:41%"></div>
+                </div>
+                <span class="text-[10px] text-slate-400 w-6">41</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Glow under mockup -->
+      <div class="absolute -bottom-10 left-1/2 -translate-x-1/2 w-2/3 h-20 bg-brand-500/15 blur-3xl rounded-full"></div>
+    </div>
+  </section>
+
+  <!-- ── STATS ─────────────────────────────────────────────── -->
+  <section class="py-20 px-6 border-t border-white/5">
+    <div class="max-w-5xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-6">
+      <div class="stat-card text-center p-6 rounded-2xl border border-white/6 bg-white/2">
+        <p class="text-4xl font-black text-brand-400 mb-1">∞</p>
+        <p class="text-xs text-slate-500 font-medium">Scales to Any Team</p>
+      </div>
+      <div class="stat-card text-center p-6 rounded-2xl border border-white/6 bg-white/2">
+        <p class="text-4xl font-black text-nano-400 mb-1">3</p>
+        <p class="text-xs text-slate-500 font-medium">Sprints Delivered</p>
+      </div>
+      <div class="stat-card text-center p-6 rounded-2xl border border-white/6 bg-white/2">
+        <p class="text-4xl font-black text-purple-400 mb-1">12</p>
+        <p class="text-xs text-slate-500 font-medium">Engineering Teams</p>
+      </div>
+      <div class="stat-card text-center p-6 rounded-2xl border border-white/6 bg-white/2">
+        <p class="text-4xl font-black text-amber-400 mb-1">3wks</p>
+        <p class="text-xs text-slate-500 font-medium">Time to Ship POC</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FEATURES ──────────────────────────────────────────── -->
+  <section class="py-24 px-6" id="features">
+    <div class="max-w-5xl mx-auto">
+      <div class="text-center mb-16">
+        <div class="badge bg-brand-500/10 text-brand-400 border border-brand-500/20 mb-4">What's Built</div>
+        <h2 class="text-3xl sm:text-4xl font-black text-white tracking-tight">
+          Everything a manager needs<br/>
+          <span class="text-slate-400 font-medium">to see AI adoption in real time</span>
+        </h2>
+      </div>
+
+      <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+
+        <!-- Feature 1 -->
+        <div class="feature-card gradient-card rounded-2xl border border-white/8 p-6">
+          <div class="w-10 h-10 rounded-xl bg-brand-500/15 flex items-center justify-center mb-4 text-brand-400">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+              <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+            </svg>
+          </div>
+          <h3 class="font-bold text-white mb-2">Leadership Dashboard</h3>
+          <p class="text-sm text-slate-400 leading-relaxed">
+            Executive overview of total users, weekly/monthly activity trends, team adoption rates, and certification progress — all in one screen.
+          </p>
+          <div class="mt-4 flex flex-wrap gap-1.5">
+            <span class="badge bg-brand-500/10 text-brand-400 text-[10px] border border-brand-500/15">Admin only</span>
+            <span class="badge bg-slate-700/60 text-slate-400 text-[10px]">Highcharts</span>
+          </div>
+        </div>
+
+        <!-- Feature 2 -->
+        <div class="feature-card gradient-card rounded-2xl border border-white/8 p-6">
+          <div class="w-10 h-10 rounded-xl bg-nano-500/15 flex items-center justify-center mb-4 text-nano-400">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
+            </svg>
+          </div>
+          <h3 class="font-bold text-white mb-2">Team Breakdown</h3>
+          <p class="text-sm text-slate-400 leading-relaxed">
+            Filter by team, drill into individual developers. Compare adoption percentages, see who is active, and spot laggards at a glance.
+          </p>
+          <div class="mt-4 flex flex-wrap gap-1.5">
+            <span class="badge bg-nano-500/10 text-nano-400 text-[10px] border border-nano-500/15">Manager view</span>
+            <span class="badge bg-slate-700/60 text-slate-400 text-[10px]">12 teams</span>
+          </div>
+        </div>
+
+        <!-- Feature 3 -->
+        <div class="feature-card gradient-card rounded-2xl border border-white/8 p-6">
+          <div class="w-10 h-10 rounded-xl bg-purple-500/15 flex items-center justify-center mb-4 text-purple-400">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+            </svg>
+          </div>
+          <h3 class="font-bold text-white mb-2">Activity Logging</h3>
+          <p class="text-sm text-slate-400 leading-relaxed">
+            Developers self-report AI tool usage, learning sessions, and experiments. Categorised by domain, tool, and type with duplicate prevention.
+          </p>
+          <div class="mt-4 flex flex-wrap gap-1.5">
+            <span class="badge bg-purple-500/10 text-purple-400 text-[10px] border border-purple-500/15">Dev facing</span>
+            <span class="badge bg-slate-700/60 text-slate-400 text-[10px]">Tagged</span>
+          </div>
+        </div>
+
+        <!-- Feature 4 -->
+        <div class="feature-card gradient-card rounded-2xl border border-white/8 p-6">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center mb-4 text-amber-400">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/>
+            </svg>
+          </div>
+          <h3 class="font-bold text-white mb-2">Certification Tracker</h3>
+          <p class="text-sm text-slate-400 leading-relaxed">
+            Track AI certifications org-wide. Developers mark certs as in-progress or completed; admins see the full picture across all teams.
+          </p>
+          <div class="mt-4 flex flex-wrap gap-1.5">
+            <span class="badge bg-amber-500/10 text-amber-400 text-[10px] border border-amber-500/15">All roles</span>
+            <span class="badge bg-slate-700/60 text-slate-400 text-[10px]">Status tracking</span>
+          </div>
+        </div>
+
+        <!-- Feature 5 -->
+        <div class="feature-card gradient-card rounded-2xl border border-white/8 p-6">
+          <div class="w-10 h-10 rounded-xl bg-rose-500/15 flex items-center justify-center mb-4 text-rose-400">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+          <h3 class="font-bold text-white mb-2">Role-Based Access</h3>
+          <p class="text-sm text-slate-400 leading-relaxed">
+            Three-tier RBAC: Developers log their own work, Managers view their teams, Admins see everything. Gated to <code class="text-rose-300 text-[11px]">@successive.tech</code> emails.
+          </p>
+          <div class="mt-4 flex flex-wrap gap-1.5">
+            <span class="badge bg-rose-500/10 text-rose-400 text-[10px] border border-rose-500/15">Secure</span>
+            <span class="badge bg-slate-700/60 text-slate-400 text-[10px]">JWT auth</span>
+          </div>
+        </div>
+
+        <!-- Feature 6 -->
+        <div class="feature-card gradient-card rounded-2xl border border-white/8 p-6">
+          <div class="w-10 h-10 rounded-xl bg-cyan-500/15 flex items-center justify-center mb-4 text-cyan-400">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+            </svg>
+          </div>
+          <h3 class="font-bold text-white mb-2">CSV Export</h3>
+          <p class="text-sm text-slate-400 leading-relaxed">
+            One-click export of all activity data for offline analysis. Managers can pull team reports; admins get the full org-level dump.
+          </p>
+          <div class="mt-4 flex flex-wrap gap-1.5">
+            <span class="badge bg-cyan-500/10 text-cyan-400 text-[10px] border border-cyan-500/15">Reporting</span>
+            <span class="badge bg-slate-700/60 text-slate-400 text-[10px]">Excel ready</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── SPRINT TIMELINE ───────────────────────────────────── -->
+  <section class="py-24 px-6 border-t border-white/5" id="sprints">
+    <div class="max-w-3xl mx-auto">
+      <div class="text-center mb-16">
+        <div class="badge bg-nano-500/10 text-nano-400 border border-nano-500/20 mb-4">Delivery Timeline</div>
+        <h2 class="text-3xl sm:text-4xl font-black text-white tracking-tight">
+          3 weeks, 3 sprints,<br/>
+          <span class="text-slate-400 font-medium">production-ready POC</span>
+        </h2>
+      </div>
+
+      <div class="space-y-6">
+
+        <!-- Sprint 1 -->
+        <div class="flex gap-5 group">
+          <div class="flex flex-col items-center">
+            <div class="w-10 h-10 rounded-full bg-brand-500 border-4 border-slate-950 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm glow-brand">1</div>
+            <div class="w-0.5 flex-1 bg-gradient-to-b from-brand-500/40 to-nano-500/20 mt-2"></div>
+          </div>
+          <div class="pb-6 flex-1">
+            <div class="gradient-card border border-white/8 rounded-2xl p-5">
+              <div class="flex items-start justify-between mb-3">
+                <div>
+                  <h3 class="font-bold text-white">Foundation & Auth</h3>
+                  <p class="text-xs text-slate-500 mt-0.5">Week 1 · May 2026</p>
+                </div>
+                <span class="badge bg-brand-500/15 text-brand-400 text-[10px] border border-brand-500/20">Complete</span>
+              </div>
+              <ul class="space-y-1.5 text-sm text-slate-400">
+                <li class="flex items-center gap-2"><span class="text-nano-400">✓</span> Project scaffolding, DB schema, SQLite migrations</li>
+                <li class="flex items-center gap-2"><span class="text-nano-400">✓</span> Email/password auth gated to @successive.tech</li>
+                <li class="flex items-center gap-2"><span class="text-nano-400">✓</span> React + Vite + Tailwind base shell, dark/light theme</li>
+                <li class="flex items-center gap-2"><span class="text-nano-400">✓</span> User profile page with editable fields</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sprint 2 -->
+        <div class="flex gap-5 group">
+          <div class="flex flex-col items-center">
+            <div class="w-10 h-10 rounded-full bg-nano-500 border-4 border-slate-950 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm glow-nano">2</div>
+            <div class="w-0.5 flex-1 bg-gradient-to-b from-nano-500/40 to-purple-500/20 mt-2"></div>
+          </div>
+          <div class="pb-6 flex-1">
+            <div class="gradient-card border border-white/8 rounded-2xl p-5">
+              <div class="flex items-start justify-between mb-3">
+                <div>
+                  <h3 class="font-bold text-white">Activity Logging Core</h3>
+                  <p class="text-xs text-slate-500 mt-0.5">Week 2 · May 2026</p>
+                </div>
+                <span class="badge bg-nano-500/15 text-nano-400 text-[10px] border border-nano-500/20">Complete</span>
+              </div>
+              <ul class="space-y-1.5 text-sm text-slate-400">
+                <li class="flex items-center gap-2"><span class="text-nano-400">✓</span> Activity log form: tool, domain, date, notes</li>
+                <li class="flex items-center gap-2"><span class="text-nano-400">✓</span> Personal timeline history view</li>
+                <li class="flex items-center gap-2"><span class="text-nano-400">✓</span> Certification tracker (in-progress / completed)</li>
+                <li class="flex items-center gap-2"><span class="text-nano-400">✓</span> Domain / tag system with duplicate prevention</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sprint 3 -->
+        <div class="flex gap-5 group">
+          <div class="flex flex-col items-center">
+            <div class="w-10 h-10 rounded-full bg-purple-500 border-4 border-slate-950 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm" style="box-shadow: 0 0 20px rgba(168,85,247,0.4)">3</div>
+          </div>
+          <div class="flex-1">
+            <div class="gradient-card border border-white/8 rounded-2xl p-5">
+              <div class="flex items-start justify-between mb-3">
+                <div>
+                  <h3 class="font-bold text-white">Admin Dashboard & Reporting</h3>
+                  <p class="text-xs text-slate-500 mt-0.5">Week 3 · May 2026</p>
+                </div>
+                <span class="badge bg-purple-500/15 text-purple-400 text-[10px] border border-purple-500/20">Complete</span>
+              </div>
+              <ul class="space-y-1.5 text-sm text-slate-400">
+                <li class="flex items-center gap-2"><span class="text-nano-400">✓</span> Leadership dashboard with KPI cards + Highcharts</li>
+                <li class="flex items-center gap-2"><span class="text-nano-400">✓</span> Team breakdown view with adoption % metrics</li>
+                <li class="flex items-center gap-2"><span class="text-nano-400">✓</span> Individual developer spotlight (managers / admins)</li>
+                <li class="flex items-center gap-2"><span class="text-nano-400">✓</span> CSV export for offline reporting</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── TECH STACK ─────────────────────────────────────────── -->
+  <section class="py-24 px-6 border-t border-white/5" id="stack">
+    <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-14">
+        <div class="badge bg-slate-700/60 text-slate-400 border border-white/8 mb-4">Tech Stack</div>
+        <h2 class="text-3xl sm:text-4xl font-black text-white tracking-tight">
+          Modern, lightweight,<br/>
+          <span class="text-slate-400 font-medium">production-portable</span>
+        </h2>
+      </div>
+
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div class="gradient-card rounded-2xl border border-white/8 p-6">
+          <p class="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-4">Frontend</p>
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-cyan-500/15 flex items-center justify-center text-base">⚛️</div>
+                <div>
+                  <p class="text-sm font-semibold text-white">React 18 + Vite</p>
+                  <p class="text-xs text-slate-500">SPA with fast HMR</p>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-lg bg-sky-500/15 flex items-center justify-center text-base">🎨</div>
+              <div>
+                <p class="text-sm font-semibold text-white">Tailwind CSS</p>
+                <p class="text-xs text-slate-500">Utility-first, dark mode</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-lg bg-purple-500/15 flex items-center justify-center text-base">📊</div>
+              <div>
+                <p class="text-sm font-semibold text-white">Highcharts</p>
+                <p class="text-xs text-slate-500">Bar, pie, and KPI charts</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-lg bg-green-500/15 flex items-center justify-center text-base">✨</div>
+              <div>
+                <p class="text-sm font-semibold text-white">Framer Motion</p>
+                <p class="text-xs text-slate-500">Page & micro animations</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="gradient-card rounded-2xl border border-white/8 p-6">
+          <p class="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-4">Backend & Infra</p>
+          <div class="space-y-3">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-lg bg-green-500/15 flex items-center justify-center text-base">🟢</div>
+              <div>
+                <p class="text-sm font-semibold text-white">Node.js + Express</p>
+                <p class="text-xs text-slate-500">REST API, middleware</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center text-base">🗄️</div>
+              <div>
+                <p class="text-sm font-semibold text-white">SQLite → Postgres-ready</p>
+                <p class="text-xs text-slate-500">Zero-setup dev, portable schema</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-lg bg-yellow-500/15 flex items-center justify-center text-base">🔐</div>
+              <div>
+                <p class="text-sm font-semibold text-white">bcrypt + JWT</p>
+                <p class="text-xs text-slate-500">Secure auth, httpOnly token</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-lg bg-slate-700/60 flex items-center justify-center text-base">▲</div>
+              <div>
+                <p class="text-sm font-semibold text-white">Vercel + Render</p>
+                <p class="text-xs text-slate-500">Frontend + API hosting</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── BUILT WITH AI ──────────────────────────────────────── -->
+  <section class="py-24 px-6 border-t border-white/5">
+    <div class="max-w-3xl mx-auto text-center">
+      <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-nano-500 flex items-center justify-center mx-auto mb-6 text-3xl" style="box-shadow: 0 0 40px rgba(58,96,245,0.3)">
+        🤖
+      </div>
+      <div class="badge bg-brand-500/10 text-brand-400 border border-brand-500/20 mb-4">Built Different</div>
+      <h2 class="text-3xl sm:text-4xl font-black text-white tracking-tight mb-4">
+        Built with Claude AI as the primary development partner
+      </h2>
+      <p class="text-slate-400 text-lg leading-relaxed mb-8">
+        This entire POC was built with Claude Code as the primary development assistant — from schema design to component architecture to deployment config. A meta-demonstration of AI-assisted engineering, built to measure AI adoption.
+      </p>
+      <div class="grid sm:grid-cols-3 gap-4 text-left">
+        <div class="gradient-card border border-white/8 rounded-xl p-4">
+          <p class="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-2">AI Tools Used</p>
+          <p class="text-sm text-slate-300">Claude Code, Claude API</p>
+        </div>
+        <div class="gradient-card border border-white/8 rounded-xl p-4">
+          <p class="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-2">Lines of Code</p>
+          <p class="text-sm text-slate-300">~3,500 across stack</p>
+        </div>
+        <div class="gradient-card border border-white/8 rounded-xl p-4">
+          <p class="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-2">Delivery</p>
+          <p class="text-sm text-slate-300">3 weeks, 0 external deps</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CTA ───────────────────────────────────────────────── -->
+  <section class="py-24 px-6 border-t border-white/5">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-3xl sm:text-4xl font-black text-white tracking-tight mb-4">
+        Ready to explore?
+      </h2>
+      <p class="text-slate-400 text-lg mb-10">
+        Access the live dashboard or dive into the source code.
+      </p>
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a href="https://ai-practice-phi.vercel.app" target="_blank"
+           class="w-full sm:w-auto flex items-center justify-center gap-3 bg-brand-500 hover:bg-brand-600 text-white font-bold text-sm px-8 py-4 rounded-xl transition-all glow-brand">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/>
+          </svg>
+          ai-practice-phi.vercel.app
+        </a>
+        <a href="https://github.com/rahulsuccessive491/aiPractice" target="_blank"
+           class="w-full sm:w-auto flex items-center justify-center gap-3 border border-white/10 hover:border-white/20 bg-white/5 hover:bg-white/8 text-slate-300 hover:text-white font-bold text-sm px-8 py-4 rounded-xl transition-all">
+          <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+          </svg>
+          github.com/rahulsuccessive491/aiPractice
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FOOTER ─────────────────────────────────────────────── -->
+  <footer class="border-t border-white/5 py-10 px-6">
+    <div class="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-slate-600">
+      <div class="flex items-center gap-3">
+        <div class="w-6 h-6 rounded-md bg-brand-500/20 flex items-center justify-center">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+            <path d="M8 2L14 5.5V10.5L8 14L2 10.5V5.5L8 2Z" fill="#3a60f5" fill-opacity="0.7"/>
+          </svg>
+        </div>
+        <span>AI Practice Dashboard · Successive Technologies</span>
+      </div>
+      <div class="flex items-center gap-6">
+        <a href="https://github.com/rahulsuccessive491/aiPractice" target="_blank" class="hover:text-slate-400 transition-colors">GitHub</a>
+        <a href="https://ai-practice-phi.vercel.app" target="_blank" class="hover:text-slate-400 transition-colors">Live App</a>
+        <span>POC · May 2026</span>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
